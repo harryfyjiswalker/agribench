@@ -104,5 +104,15 @@ find "$project/runs/pastis/$USER" -maxdepth 1 -type d -name "*-$job"
 
 __________________________________________________________________________
 
-# General Use
+# General Use when adding a model
+
+1. After logging in, open agribench and set paths:
+```
+cd ~/projects/agribench
+
+project=/lustre/shared/agriscience-benchmark
+data=/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet
+```
+
+2. Add a model
 
