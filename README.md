@@ -1,5 +1,7 @@
 # Scores on the doors
 
+## Summary
+
 ## Crop Classification
 
 ### In-Distribution (PASTIS-R)
@@ -17,6 +19,14 @@ Parcel-level crop type classification on PASTIS-R PixelSet (Zenodo 5745151). Sco
 Run links contain the recorded parcel and feature fingerprints. Sequence runs lack a training parcel fingerprint. Check inputs and training budgets before comparing scores.
 
 <!-- leaderboard:end -->
+
+### OOD (PLANTEUR)
+
+## Yield Prediction
+
+## Phenology Detection
+
+## Field Delineation
 
 ## Run a model on Anunna
 
