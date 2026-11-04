@@ -1,6 +1,6 @@
 # AgriBench
 
-Small easy-use benchmark for us to compare experiments/ models.
+
 
 ## Scores on the doors
 
