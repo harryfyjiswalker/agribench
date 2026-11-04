@@ -37,9 +37,46 @@ After logging in,
 
 1. Set paths
 ```
+project=/lustre/shared/agriscience-benchmark
+data=/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet
+```
 
+2. Check if can read dataset
+```
+head -n 1 "$data/metadata_parcel.csv"
+```
+If prints CSV header with ID_PARCEL, fold etc. then all good.
+
+3. Check if can use shared python environment (if prints python OK):
+```
+"$project/envs/benchmark-v1/bin/python" -c 'import hydra, torch, sklearn, geopandas; print("Python OK")'
+```
+
+4. Check if code can be used (should print three git commit IDs):
 
 ```
+git -C "$project/upstream/pastis-benchmark" rev-parse HEAD
+git -C "$project/upstream/ltae" rev-parse HEAD
+git -C "$project/upstream/utae-paps" rev-parse HEAD
+```
+
+5. Can read sentinel-2 cache?
+```
+find "$project/features/pastis" -maxdepth 1 -type f -name 'S2-*.npz' -readable -print -quit
+```
+
+6. Can write results onto file?
+```
+probe=$(mktemp "$project/runs/pastis/$USER/.access-check.XXXXXX") &&
+rm -- "$probe" &&
+echo "Run directory OK"
+```
+
+
+
+
+
+
 
 
 __________________________________________________________________________
