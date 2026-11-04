@@ -104,7 +104,7 @@ find "$project/runs/pastis/$USER" -maxdepth 1 -type d -name "*-$job"
 
 __________________________________________________________________________
 
-# General Use when adding a model
+# Adding a model
 
 1. After logging in, open agribench and set paths:
 ```
@@ -160,7 +160,7 @@ test -n "$run_dir" &&
 cat "results/$name.json"
 ```
 
-6. Open a PR
+6. Open a pull request
 ```
 git add "results/$name.json"
 git add conf/model/logistic_regression.yaml run_experiments.py
@@ -176,17 +176,6 @@ git push -u origin HEAD
 
 
 
-
-2. Check no unfinished edits in checkout:
-```
-git status --short
-```
-
-3. If nothing, create a branch e.g. here for extra trees: [what if?]
-```
-git fetch origin &&
-git switch -c models/extra-trees origin/main
-```
 
 a. Standard ML
 
