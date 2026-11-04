@@ -1,7 +1,5 @@
 # Scores on the doors
 
-## Best Performers
-
 ## Crop Classification
 
 ### In-Distribution (PASTIS-R)
@@ -31,9 +29,9 @@ Run links contain the recorded parcel and feature fingerprints. Sequence runs la
 
 _____________________________________________________________________________________________________________________________________________________________________
 
-#Usage
+# Usage
 
-#Setup/ Access checks
+## Setup/ Access checks
 
 After logging in,
 
