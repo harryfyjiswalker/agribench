@@ -1,6 +1,6 @@
 # AgriBench
 
-## Leaderboards
+## Scores on the doors
 
 <!-- leaderboard:start -->
 
