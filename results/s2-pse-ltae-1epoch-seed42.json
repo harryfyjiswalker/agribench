@@ -22,5 +22,6 @@
   "checkpoint_sha256": null,
   "selected_epoch": 1,
   "accuracy": 0.7373269252774917,
-  "macro_iou": 0.30751937238237237
+  "macro_iou": 0.30751937238237237,
+  "macro_f1": 0.3844237926095866
 }

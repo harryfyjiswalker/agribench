@@ -25,12 +25,12 @@ def render(results):
         val = ", ".join(map(str, row["validation_folds"]))
         epoch = row["selected_epoch"] or "—"
         macro_f1 = row.get("macro_f1")
-        f1_display = f"{macro_f1:.2%}" if macro_f1 is not None else "—"
+        f1_display = f"{macro_f1:.3f}" if macro_f1 is not None else "—"
         lines.append(
             f'| [`{row["run"]}`](results/{row["run"]}.json) | {row["model"]} | '
             f'{sensors} | {train} → {val} | {row["train_parcels"]:,} | '
             f'{row["validation_parcels"]:,} | {row["seed"]} | {epoch} | '
-            f'{row["macro_iou"]:.2%} | {row["accuracy"]:.2%} | {f1_display} |'
+            f'{row["macro_iou"]:.3f} | {row["accuracy"]:.3f} | {f1_display} |'
         )
     lines.extend([
         "",
