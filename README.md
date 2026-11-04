@@ -1,8 +1,8 @@
 # Scores on the doors
 
-##Crop Classification
+## Crop Classification
 
-###In-Distribution (PASTIS-R)
+### In-Distribution (PASTIS-R)
 
 <!-- leaderboard:start -->
 
