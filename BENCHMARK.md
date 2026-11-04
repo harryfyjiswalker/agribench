@@ -24,3 +24,34 @@ The TabPFN command needs an installed TabPFN release and an accessible classifie
 The tabular features are our baseline, separate from the authors' sequence protocol. For each sensor, pool every stored parcel pixel by median at each acquisition, then take per-band medians in 30-day bins over the loader's day-offset range. Empty bins stay missing in the cache. Both estimators get the same imputed table. Each run saves actual training IDs, parcel predictions, feature hashes and config. Treat the extracted dataset as immutable while using the cache, or use a fresh cache directory after changing the raw arrays. The first cache build reads tens of thousands of files per sensor. Do not submit multiple builds of the same table simultaneously.
 
 Keep the same data path, cache path and configuration for shared comparisons. Ensure collaborators can read the data and cache and write to their own run directory.
+
+## Probe a frozen Galileo embedding table
+
+Prepare an NPZ file with an integer `ids` vector and a finite floating-point
+`features` matrix. Include exactly one row per parcel in folds 1–4. AgriBench
+aligns rows by parcel ID and takes labels and folds from PASTIS-R metadata.
+Record the Galileo revision, checkpoint hash, input preprocessing and pooling
+alongside the table. The result JSON records the representation and table hash.
+
+From the AgriBench checkout on Anunna, set `project`, `data` and `embeddings`
+to the shared project, original PixelSet and completed NPZ paths. Run the
+linear probe:
+
+```bash
+sbatch cpu.sbatch model=logistic_regression inputs=galileo_s2 validation=pilot \
+  upstream_root="$project/upstream" dataset.root="$data" inputs.embedding_path="$embeddings"
+```
+
+Then use the same table with the tested TabPFN environment and checkpoint.
+Set `tabpfn_python` and `checkpoint` to their absolute paths:
+
+```bash
+BENCHMARK_PYTHON="$tabpfn_python" sbatch --mem=32G train.sbatch \
+  model=tabpfn inputs=galileo_s2 validation=pilot \
+  upstream_root="$project/upstream" dataset.root="$data" \
+  inputs.embedding_path="$embeddings" model.estimator.model_path="$checkpoint"
+```
+
+Compare the saved training IDs, validation IDs and table hash across these
+two runs. Galileo extraction is a separate step and needs a real-data smoke
+test before preparing the full table.

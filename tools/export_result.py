@@ -59,6 +59,8 @@ def export(run, label):
         "validation_ids_sha256": ids_hash(predictions),
         "training_ids_sha256": ids_hash(train) if train is not None else None,
         "feature_sha256": [table["sha256"] for table in tables],
+        **({"representation": tables[0]["representation"]}
+           if tables and "representation" in tables[0] else {}),
         "checkpoint_sha256": checkpoint.read_text().strip() if checkpoint.exists() else None,
         "selected_epoch": best.get("epoch"),
         "accuracy": best["accuracy"],

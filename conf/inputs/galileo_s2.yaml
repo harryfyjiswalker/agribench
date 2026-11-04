@@ -1,0 +1,3 @@
+sensors: [S2]
+representation: galileo_s2
+embedding_path: ???

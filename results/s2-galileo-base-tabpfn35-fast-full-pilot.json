@@ -1,0 +1,30 @@
+{
+  "run": "s2-galileo-base-tabpfn35-fast-full-pilot",
+  "dataset": "PASTIS-R PixelSet (Zenodo 5745151)",
+  "model": "tabpfn",
+  "seed": 42,
+  "sensors": [
+    "S2"
+  ],
+  "train_folds": [
+    1,
+    2,
+    3
+  ],
+  "validation_folds": [
+    4
+  ],
+  "train_parcels": 51833,
+  "validation_parcels": 17478,
+  "validation_ids_sha256": "65f6c84b452bf9d3cd57bda2d03be514d7dcc1ade40418416253537aafd248b7",
+  "training_ids_sha256": "ee4215d32413f8327fa8f299d55f0ee86d7a342cfb868a601d0190c990200f23",
+  "feature_sha256": [
+    "f3f0d8352eb7d300fedb5c739873be8e9f99eb9b6c10cdcc9f4c9ce7b4bdf4a8"
+  ],
+  "representation": "galileo_s2",
+  "checkpoint_sha256": "14e0b81285bca7a6d1ef121169f27f651f76dff49cad6c0b8779d5c836018550",
+  "selected_epoch": null,
+  "accuracy": 0.8737269710493192,
+  "macro_iou": 0.5964718700233096,
+  "macro_f1": 0.7170644704833106
+}
