@@ -13,8 +13,6 @@ def render(results):
         return "No validation results published yet."
 
     lines = [
-        "Parcel-level crop type classification on PASTIS-R PixelSet (Zenodo 5745151). "
-        "Scores are from validation. Fold 5 is reserved for testing.",
         "",
         "| Run | Model | Sensors | Train → validation folds | Train parcels | Validation parcels | Seed | Epoch | Parcel mIoU | Accuracy | Macro F1 |",
         "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
@@ -34,9 +32,6 @@ def render(results):
         )
     lines.extend([
         "",
-        "Run links contain the recorded parcel and feature fingerprints. "
-        "Sequence runs lack a training parcel fingerprint. "
-        "Check inputs and training budgets before comparing scores.",
     ])
     return "\n".join(lines)
 
