@@ -105,6 +105,8 @@ __________________________________________________________________________
 
 # Adding a model
 
+## Adding a generic sci-kit learn model
+
 1. After logging in, open agribench and set paths:
 ```
 cd ~/projects/agribench
@@ -172,7 +174,7 @@ git commit -m "Record full S2 logistic regression validation result" &&
 git push -u origin HEAD
 ```
 
-
+## Adding a GeoFM
 
 
 
