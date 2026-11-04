@@ -31,6 +31,19 @@ Run links contain the recorded parcel and feature fingerprints. Sequence runs la
 
 _____________________________________________________________________________________________________________________________________________________________________
 
+# Access checks
+
+After logging in,
+
+1. Set paths
+```
+
+
+```
+
+
+__________________________________________________________________________
+
 ```
 project=/lustre/shared/agriscience-benchmark
 bench="$project/envs/benchmark-v1/bin/python"
