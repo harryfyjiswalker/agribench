@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 import yaml
+from sklearn.metrics import f1_score
 
 
 def ids_hash(ids):
@@ -27,7 +28,15 @@ def export(run, label):
     metrics = json.loads((run / "metrics.json").read_text())
     # The training loop saves predictions from the earliest best validation epoch.
     best = max(metrics, key=lambda row: row["macro_iou"])
-    predictions = csv_ids(run / "validation-predictions.csv")
+    with (run / "validation-predictions.csv").open(newline="") as file:
+        rows = list(csv.DictReader(file))
+    predictions = [int(row["parcel_id"]) for row in rows]
+    truth = [int(row["label_index"]) for row in rows]
+    predicted = [int(row["prediction_index"]) for row in rows]
+    classes = range(cfg["dataset"]["num_classes"])
+    if (set(truth) | set(predicted)) - set(classes):
+        raise ValueError("Prediction file contains an invalid class index")
+    macro_f1 = f1_score(truth, predicted, labels=list(classes), average="macro", zero_division=0)
     if len(predictions) != best["validation_parcels"]:
         raise ValueError("Prediction count differs from saved metrics")
     train_path = run / "training-ids.csv"
@@ -54,6 +63,7 @@ def export(run, label):
         "selected_epoch": best.get("epoch"),
         "accuracy": best["accuracy"],
         "macro_iou": best["macro_iou"],
+        "macro_f1": float(macro_f1),
     }
 
 
@@ -61,12 +71,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("name")
+    parser.add_argument("--backfill-macro-f1", action="store_true",
+                        help="Add macro F1 to an existing summary of this same run")
     args = parser.parse_args()
     if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", args.name):
         parser.error("Name must contain only lowercase letters, digits, underscores or hyphens")
     result = export(args.run_dir, args.name)
     dest = Path(__file__).resolve().parents[1] / "results" / f"{args.name}.json"
-    with dest.open("x") as file:
+    if args.backfill_macro_f1:
+        existing = json.loads(dest.read_text())
+        original = {key: value for key, value in result.items() if key != "macro_f1"}
+        if existing == result:
+            print(dest)
+            raise SystemExit(0)
+        if existing != original:
+            parser.error("Saved run does not match the existing result summary")
+    with dest.open("w" if args.backfill_macro_f1 else "x") as file:
         json.dump(result, file, indent=2, allow_nan=False)
         file.write("\n")
     print(dest)
