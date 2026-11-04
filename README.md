@@ -109,11 +109,37 @@ __________________________________________________________________________
 1. After logging in, open agribench and set paths:
 ```
 cd ~/projects/agribench
-
 project=/lustre/shared/agriscience-benchmark
 data=/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet
-export BENCHMARK_PYTHON="$project/envs/benchmark-v1/bin/python"
 ```
+
+2. Add model config (logistic reg in this case)
+```
+cat > conf/model/logistic_regression.yaml <<'YAML'
+name: logistic_regression
+estimator:
+  _target_: sklearn.pipeline.make_pipeline
+  _args_:
+    - _target_: sklearn.preprocessing.StandardScaler
+    - _target_: sklearn.linear_model.LogisticRegression
+      solver: lbfgs
+      C: 1.0
+      max_iter: 1000
+YAML
+```
+
+3. Submit the model
+
+model=logistic_regression
+
+sbatch cpu.sbatch model="$model" validation=pilot \
+  upstream_root="$project/upstream" \
+  dataset.root="$data" \
+  cache_dir="$project/features/pastis"
+
+
+
+
 
 2. Check no unfinished edits in checkout:
 ```
