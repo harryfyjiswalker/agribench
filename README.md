@@ -28,7 +28,9 @@ Run links contain the recorded parcel and feature fingerprints. Sequence runs la
 
 ## Field Delineation
 
-## Run a model on Anunna
+
+_____________________________________________________________________________________________________________________________________________________________________
+# Usage
 
 Run these commands in your **Anunna SSH terminal**. All Slurm commands below assume you are in the AgriBench checkout.
 
