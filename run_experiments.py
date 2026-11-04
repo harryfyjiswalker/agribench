@@ -85,7 +85,7 @@ def main(cfg):
         return {"accuracy": float(np.mean(np.asarray(truth) == pred)),
                 "macro_iou": float(mIou(truth, pred, data.num_classes))}
 
-    if cfg.model.name in {"rf", "tabpfn"}:
+    if "estimator" in cfg.model:
         from tabular import run
         run(cfg, folds, out, PASTIS_Dataset_PixelSet, score_predictions)
         return

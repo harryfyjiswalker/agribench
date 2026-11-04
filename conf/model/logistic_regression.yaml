@@ -1,0 +1,9 @@
+name: logistic_regression
+estimator:
+  _target_: sklearn.pipeline.make_pipeline
+  _args_:
+    - _target_: sklearn.preprocessing.StandardScaler
+    - _target_: sklearn.linear_model.LogisticRegression
+      solver: lbfgs
+      C: 1.0
+      max_iter: 1000
