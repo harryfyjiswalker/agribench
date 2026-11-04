@@ -90,7 +90,8 @@ def main(cfg):
         run(cfg, folds, out, PASTIS_Dataset_PixelSet, score_predictions)
         return
     if (cfg.model.name != "adapted_pse_ltae2d" or data.sensor != "S2"
-            or list(cfg.inputs.sensors) != ["S2"] or exp.train_limit is not None
+            or list(cfg.inputs.sensors) != ["S2"] or "embedding_path" in cfg.inputs
+            or exp.train_limit is not None
             or split.get("train_limit") is not None):
         raise ValueError("The neural pilot uses S2 and its existing batch-budget settings")
 

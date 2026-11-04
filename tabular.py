@@ -86,6 +86,25 @@ def feature_table(root, sensor, folds, ids, cache, loader):
     return features, {"file": str(path), "sha256": digest(path), **provenance}
 
 
+def embedding_table(path, ids, representation):
+    with path.open("rb") as file:
+        sha256 = hashlib.file_digest(file, "sha256").hexdigest()
+        file.seek(0)
+        with np.load(file, allow_pickle=False) as table:
+            parcel_ids = table["ids"]
+            features = table["features"]
+    if parcel_ids.ndim != 1 or parcel_ids.dtype.kind not in "iu":
+        raise ValueError("Embedding IDs must be a one-dimensional integer array")
+    if (features.ndim != 2 or features.shape[0] != len(parcel_ids)
+            or not features.shape[1] or features.dtype.kind != "f"
+            or not np.isfinite(features).all()):
+        raise ValueError("Expected a finite floating-point embedding vector per parcel")
+    order = np.argsort(parcel_ids)
+    if not np.array_equal(parcel_ids[order], ids):
+        raise ValueError("Embeddings must contain exactly one row for each train and validation parcel")
+    return features[order], {"file": str(path), "sha256": sha256, "representation": representation}
+
+
 def run(cfg, folds, out, loader, score_predictions):
     root = Path(cfg.dataset.root).resolve()
     sensors = list(cfg.inputs.sensors)
@@ -114,8 +133,11 @@ def run(cfg, folds, out, loader, score_predictions):
         train.sort()
     if not len(val) or len(np.unique(y[train])) != cfg.dataset.num_classes:
         raise ValueError("Empty validation split or training subset missing crop classes")
-    tables = [feature_table(root, sensor, folds[0] + folds[1], ids,
-                            Path(cfg.cache_dir), loader) for sensor in sensors]
+    if "embedding_path" in cfg.inputs:
+        tables = [embedding_table(Path(cfg.inputs.embedding_path), ids, cfg.inputs.representation)]
+    else:
+        tables = [feature_table(root, sensor, folds[0] + folds[1], ids,
+                                Path(cfg.cache_dir), loader) for sensor in sensors]
     x = np.concatenate([features for features, _ in tables], axis=1)
     (out / "feature-tables.json").write_text(json.dumps([p for _, p in tables], indent=2))
     pd.DataFrame({"parcel_id": ids[train]}).to_csv(out / "training-ids.csv", index=False)

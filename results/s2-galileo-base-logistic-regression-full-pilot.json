@@ -1,0 +1,30 @@
+{
+  "run": "s2-galileo-base-logistic-regression-full-pilot",
+  "dataset": "PASTIS-R PixelSet (Zenodo 5745151)",
+  "model": "logistic_regression",
+  "seed": 42,
+  "sensors": [
+    "S2"
+  ],
+  "train_folds": [
+    1,
+    2,
+    3
+  ],
+  "validation_folds": [
+    4
+  ],
+  "train_parcels": 51833,
+  "validation_parcels": 17478,
+  "validation_ids_sha256": "65f6c84b452bf9d3cd57bda2d03be514d7dcc1ade40418416253537aafd248b7",
+  "training_ids_sha256": "ee4215d32413f8327fa8f299d55f0ee86d7a342cfb868a601d0190c990200f23",
+  "feature_sha256": [
+    "f3f0d8352eb7d300fedb5c739873be8e9f99eb9b6c10cdcc9f4c9ce7b4bdf4a8"
+  ],
+  "representation": "galileo_s2",
+  "checkpoint_sha256": null,
+  "selected_epoch": null,
+  "accuracy": 0.8732692527749171,
+  "macro_iou": 0.6051920104039137,
+  "macro_f1": 0.7260139768323128
+}
