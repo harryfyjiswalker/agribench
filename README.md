@@ -176,6 +176,8 @@ git push -u origin HEAD
 
 ## Adding a GeoFM
 
+Current weights uploaded:
+
 
 
 a. Standard ML
