@@ -81,6 +81,9 @@ echo "Run directory OK"
 
 __________________________________________________________________________
 
+
+#Run baseline test
+
 ```
 project=/lustre/shared/agriscience-benchmark
 bench="$project/envs/benchmark-v1/bin/python"
