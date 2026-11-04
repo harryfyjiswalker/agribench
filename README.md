@@ -112,9 +112,19 @@ cd ~/projects/agribench
 
 project=/lustre/shared/agriscience-benchmark
 data=/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet
+export BENCHMARK_PYTHON="$project/envs/benchmark-v1/bin/python"
 ```
 
-2. Add a model
+2. Check no unfinished edits in checkout:
+```
+git status --short
+```
+
+3. If nothing, create a branch e.g. here for extra trees: [what if?]
+```
+git fetch origin &&
+git switch -c models/extra-trees origin/main
+```
 
 a. Standard ML
 
