@@ -20,7 +20,7 @@ Run links contain the recorded parcel and feature fingerprints. Sequence runs la
 
 <!-- leaderboard:end -->
 
-### OOD (PLANTEUR)
+### Out-Of-Distribution (PLANTEUR)
 
 ## Yield Prediction
 
