@@ -1,0 +1,6 @@
+name: tabpfn
+estimator:
+  _target_: tabpfn.TabPFNClassifier
+  model_path: ???
+  device: cuda
+  random_state: ${experiment.seed}

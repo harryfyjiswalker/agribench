@@ -1,0 +1,29 @@
+name: Update validation leaderboard
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'results/*.json'
+      - 'tools/render_leaderboard.py'
+      - '.github/workflows/leaderboard.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: leaderboard-main
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - run: |
+          python3 tools/render_leaderboard.py
+          if git diff --quiet -- LEADERBOARD.md; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add LEADERBOARD.md
+          git commit -m 'Update validation leaderboard'
+          git push origin HEAD:main

@@ -1,0 +1,20 @@
+defaults:
+  - dataset: pastis_s2
+  - model: pse_ltae
+  - inputs: s2
+  - validation: pilot
+  - evaluation: parcel
+  - _self_
+upstream_root: ${oc.env:HOME}/projects
+experiment:
+  seed: 42
+  epochs: 1
+  batch_size: 16
+  max_batches: null
+  train_limit: null
+cache_dir: /lustre/shared/agriscience-benchmark/features/pastis
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: /lustre/shared/agriscience-benchmark/runs/pastis/${oc.env:USER}/${now:%Y%m%d-%H%M%S}-${oc.env:SLURM_JOB_ID,local}

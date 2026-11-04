@@ -1,0 +1,4 @@
+train_folds: [1, 2, 3]
+val_folds: [4]
+test_folds: [5]
+train_limit: 5000
