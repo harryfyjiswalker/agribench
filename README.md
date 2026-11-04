@@ -31,7 +31,7 @@ Run links contain the recorded parcel and feature fingerprints. Sequence runs la
 
 _____________________________________________________________________________________________________________________________________________________________________
 
-# Access checks
+# Setup/ Access checks
 
 After logging in,
 
@@ -72,42 +72,41 @@ rm -- "$probe" &&
 echo "Run directory OK"
 ```
 
+#Run baseline test
 
+7. Clone agribench
+```
+mkdir -p ~/projects &&
+git clone https://github.com/harryfyjiswalker/agribench.git ~/projects/agribench &&
+cd ~/projects/agribench
+```
 
+[if already cloned: 
+```
+cd ~/projects/agribench
+```
+]
 
-
-
-
+8. Submit baseline:
+```
+sbatch cpu.sbatch validation=pilot \
+  upstream_root="$project/upstream" \
+  dataset.root="$data" \
+  cache_dir="$project/features/pastis"
+```
+and check (replacing id):
+```
+job=123456
+sacct -j "$job" --format=JobID,State,ExitCode,Elapsed
+tail -n 20 "slurm-$job.out"
+find "$project/runs/pastis/$USER" -maxdepth 1 -type d -name "*-$job"
+```
 
 __________________________________________________________________________
 
+# General Use
 
-#Run baseline test
 
-```
-project=/lustre/shared/agriscience-benchmark
-bench="$project/envs/benchmark-v1/bin/python"
-cache="$project/features/pastis"
-runs="$project/runs/pastis/$USER"
-
-# Check that the shared Python runs and can import the benchmark dependencies.
-if "$bench" -c 'import geopandas, hydra, numpy, pandas, scipy, sklearn, torch, yaml'; then
-  echo "PASS: shared Python environment"
-fi
-
-# Find and open one existing Sentinel-2 cache file.
-cache_file=$(find "$cache" -maxdepth 1 -type f -name 'S2-*.npz' -readable -print -quit)
-if [ -n "$cache_file" ] && head -c 1 "$cache_file" >/dev/null; then
-  echo "PASS: can read $cache_file"
-else
-  echo "FAIL: no readable Sentinel-2 cache file in $cache"
-fi
-
-# Create and remove a temporary file in your own run directory.
-if probe=$(mktemp "$runs/.access-check.XXXXXX"); then
-  rm -- "$probe" && echo "PASS: can write to $runs"
-fi
-```
 
 
 
