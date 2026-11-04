@@ -116,3 +116,17 @@ data=/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PAST
 
 2. Add a model
 
+a. Standard ML
+
+b. DL (LTSM, etc)
+
+c. Location encoder
+
+d. Geospatial FM
+
+e. Add your own model
+
+
+
+
+
