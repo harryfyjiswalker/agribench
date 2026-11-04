@@ -52,7 +52,7 @@ If prints CSV header with ID_PARCEL, fold etc. then all good.
 "$project/envs/benchmark-v1/bin/python" -c 'import hydra, torch, sklearn, geopandas; print("Python OK")'
 ```
 
-4. Check if code can be used (should print three git commit IDs; need to call them for access):
+4. Check if github code can be used (should print three git commit IDs; need to call them for access):
 
 ```
 git -C "$project/upstream/pastis-benchmark" rev-parse HEAD
@@ -130,12 +130,48 @@ YAML
 
 3. Submit the model
 
+```
 model=logistic_regression
 
 sbatch cpu.sbatch model="$model" validation=pilot \
   upstream_root="$project/upstream" \
   dataset.root="$data" \
   cache_dir="$project/features/pastis"
+```
+
+4. Check result 
+
+```
+job=123456
+sacct -j "$job" --format=JobID,State,ExitCode,Elapsed
+tail -n 30 "slurm-$job.out"
+find "$project/runs/pastis/$USER" -maxdepth 1 -type d -name "*-$job"
+```
+5. Add to leaderboard list (change name)
+```
+job=123456
+project=/lustre/shared/agriscience-benchmark
+name="s2-logistic-regression-full-pilot-$job"
+
+run_dir=$(find "$project/runs/pastis/$USER" \
+  -maxdepth 1 -type d -name "*-$job" -print -quit) &&
+test -n "$run_dir" &&
+"$project/envs/benchmark-v1/bin/python" tools/export_result.py "$run_dir" "$name" &&
+cat "results/$name.json"
+```
+
+6. Open a PR
+```
+git add "results/$name.json"
+git add conf/model/logistic_regression.yaml run_experiments.py
+```
+
+and commit and push branch:
+```
+git diff --cached --stat
+git commit -m "Record full S2 logistic regression validation result" &&
+git push -u origin HEAD
+```
 
 
 
