@@ -52,7 +52,7 @@ If prints CSV header with ID_PARCEL, fold etc. then all good.
 "$project/envs/benchmark-v1/bin/python" -c 'import hydra, torch, sklearn, geopandas; print("Python OK")'
 ```
 
-4. Check if code can be used (should print three git commit IDs):
+4. Check if code can be used (should print three git commit IDs; need to call them for access):
 
 ```
 git -C "$project/upstream/pastis-benchmark" rev-parse HEAD
@@ -65,7 +65,7 @@ git -C "$project/upstream/utae-paps" rev-parse HEAD
 find "$project/features/pastis" -maxdepth 1 -type f -name 'S2-*.npz' -readable -print -quit
 ```
 
-6. Can write results onto file?
+6. Can write results onto file? Need to add file with username /pastis.
 ```
 probe=$(mktemp "$project/runs/pastis/$USER/.access-check.XXXXXX") &&
 rm -- "$probe" &&
