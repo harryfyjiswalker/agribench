@@ -30,7 +30,99 @@ Run links contain the recorded parcel and feature fingerprints. Sequence runs la
 
 
 _____________________________________________________________________________________________________________________________________________________________________
-# Usage
+# Usage (for PASTIS initially)
+
+Sorry if this is mostly obvious i am just writing it with every step because i always forget
+
+## First-time setup
+
+[1. if not logged in, open local terminal and ssh in
+```
+ssh USERNAME@login.anunna.wur.nl
+```
+]
+
+2. Get AgriBench by running this once:
+```
+mkdir -p ~/projects
+git clone https://github.com/harryfyjiswalker/agribench.git ~/projects/agribench
+```
+
+3. Open checkout and load the shared settings
+```
+cd ~/projects/agribench
+source /lustre/shared/agriscience-benchmark/paths.sh
+```
+
+4. Check access
+```
+(
+  set -e
+
+  for path in "$data/metadata_parcel.csv" "$data/metadata.geojson" "$data/DATA_S2" "$cache"; do
+    test -r "$path" || { echo "Cannot read: $path"; exit 1; }
+  done
+
+  for dir in "$data/DATA_S2" "$cache"; do
+    test -x "$dir" || { echo "Cannot enter: $dir"; exit 1; }
+  done
+
+  for repo in pastis-benchmark ltae utae-paps; do
+    git -C "$upstream/$repo" rev-parse --verify HEAD >/dev/null
+    git -C "$upstream/$repo" diff HEAD --binary >/dev/null
+  done
+
+  mkdir -p "$runs"
+  test -w "$runs" && test -x "$runs" ||
+    { echo "Cannot write to: $runs"; exit 1; }
+
+  "$BENCHMARK_PYTHON" -c 'import geopandas, hydra, numpy, pandas, scipy, sklearn, torch, yaml'
+  echo "Access check passed for $(id -un)"
+)
+```
+
+5. Run baseline to check working.
+```
+sbatch cpu.sbatch validation=pilot upstream_root="$upstream" dataset.root="$data" cache_dir="$cache"
+```
+This requests a cpu and runs a random forest on folds 1-3, validating on fold 4 of PASTIS.
+
+7. Check result (change to your jobid)
+```
+job=123456
+sacct -j "$job" --format=JobID,State,ExitCode,Elapsed
+tail -n 20 "slurm-$job.out"
+find "$runs" -maxdepth 1 -type d -name "*-$job"
+```
+
+## Benchmarking new model
+
+
+
+
+
+
+
+
+
+8. Send result to leaderboard
+
+
+
+
+
+what is a checkout?
+
+
+
+
+
+## Subsequent logins
+
+
+
+
+
 
 Run these commands in your **Anunna SSH terminal**. All Slurm commands below assume you are in the AgriBench checkout.
 
