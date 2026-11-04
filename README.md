@@ -1,8 +1,8 @@
-# AgriBench
+# Scores on the doors
 
+##Crop Classification
 
-
-## Scores on the doors
+###In-Distribution (PASTIS-R)
 
 <!-- leaderboard:start -->
 
