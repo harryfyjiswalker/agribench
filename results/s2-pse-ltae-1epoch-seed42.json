@@ -1,0 +1,26 @@
+{
+  "run": "s2-pse-ltae-1epoch-seed42",
+  "dataset": "PASTIS-R PixelSet (Zenodo 5745151)",
+  "model": "adapted_pse_ltae2d",
+  "seed": 42,
+  "sensors": [
+    "S2"
+  ],
+  "train_folds": [
+    1,
+    2,
+    3
+  ],
+  "validation_folds": [
+    4
+  ],
+  "train_parcels": 51833,
+  "validation_parcels": 17478,
+  "validation_ids_sha256": "65f6c84b452bf9d3cd57bda2d03be514d7dcc1ade40418416253537aafd248b7",
+  "training_ids_sha256": null,
+  "feature_sha256": [],
+  "checkpoint_sha256": null,
+  "selected_epoch": 1,
+  "accuracy": 0.7373269252774917,
+  "macro_iou": 0.30751937238237237
+}
