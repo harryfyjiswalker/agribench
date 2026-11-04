@@ -14,10 +14,18 @@ def render(results):
 
     lines = [
         "",
-        "| Run | Model | Sensors | Train → validation folds | Train parcels | Validation parcels | Seed | Epoch | Parcel mIoU | Accuracy | Macro F1 |",
-        "|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Run | Model | Representation | Sensors | Train → validation folds | Train parcels | Validation parcels | Seed | Epoch | Parcel mIoU | Accuracy | Macro F1 |",
+        "|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in sorted(results, key=lambda row: (-row["macro_iou"], row["run"])):
+        representation = row.get("representation")
+        if representation == "galileo_s2":
+            representation = "Galileo Base embeddings"
+        elif not representation:
+            if row["model"] == "adapted_pse_ltae2d":
+                representation = "Parcel pixel sets"
+            else:
+                representation = "Parcel summaries" if row.get("feature_sha256") else "—"
         sensors = " + ".join(row["sensors"])
         train = ", ".join(map(str, row["train_folds"]))
         val = ", ".join(map(str, row["validation_folds"]))
@@ -26,7 +34,7 @@ def render(results):
         f1_display = f"{macro_f1:.3f}" if macro_f1 is not None else "—"
         lines.append(
             f'| [`{row["run"]}`](results/{row["run"]}.json) | {row["model"]} | '
-            f'{sensors} | {train} → {val} | {row["train_parcels"]:,} | '
+            f'{representation} | {sensors} | {train} → {val} | {row["train_parcels"]:,} | '
             f'{row["validation_parcels"]:,} | {row["seed"]} | {epoch} | '
             f'{row["macro_iou"]:.3f} | {row["accuracy"]:.3f} | {f1_display} |'
         )
