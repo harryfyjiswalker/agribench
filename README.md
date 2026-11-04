@@ -30,6 +30,36 @@ Run links contain the recorded parcel and feature fingerprints. Sequence runs la
 
 
 _____________________________________________________________________________________________________________________________________________________________________
+
+```
+project=/lustre/shared/agriscience-benchmark
+bench="$project/envs/benchmark-v1/bin/python"
+cache="$project/features/pastis"
+runs="$project/runs/pastis/$USER"
+
+# Check that the shared Python runs and can import the benchmark dependencies.
+if "$bench" -c 'import geopandas, hydra, numpy, pandas, scipy, sklearn, torch, yaml'; then
+  echo "PASS: shared Python environment"
+fi
+
+# Find and open one existing Sentinel-2 cache file.
+cache_file=$(find "$cache" -maxdepth 1 -type f -name 'S2-*.npz' -readable -print -quit)
+if [ -n "$cache_file" ] && head -c 1 "$cache_file" >/dev/null; then
+  echo "PASS: can read $cache_file"
+else
+  echo "FAIL: no readable Sentinel-2 cache file in $cache"
+fi
+
+# Create and remove a temporary file in your own run directory.
+if probe=$(mktemp "$runs/.access-check.XXXXXX"); then
+  rm -- "$probe" && echo "PASS: can write to $runs"
+fi
+```
+
+
+
+
+
 # Usage (for PASTIS initially)
 
 Sorry if this is mostly obvious i am just writing it with every step because i always forget
