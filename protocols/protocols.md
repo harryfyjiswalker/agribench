@@ -39,9 +39,7 @@ export project=/lustre/shared/agriscience-benchmark
 
 Cross-validation: 
 - In-domain performance: PASTIS-R (5-fold CV, using pre-determined folds):
-  - Frozen Feature Set/ Embedding: Uses [Geo Eval Harness](https://github.com/torchgeo/geo-eval-harness) configuration, with an L2-regularised logistic probe trained on folds 1-3 with fold 4 as validation and fold 5 as testing.
-
-This uses harness defaults of 40 log-spaced regularisation values in range [1e-6, 1e4]; 200 parcel bootstrap resampling for 95% confidence interval.
+  - Frozen Feature Set/ Embedding: Uses [Geo Eval Harness](https://github.com/torchgeo/geo-eval-harness) configuration for frozen embeddings, with an L2-regularised logistic probe trained on folds 1-3 with fold 4 as validation and fold 5 as testing. This uses harness defaults of 40 log-spaced regularisation values in range [1e-6, 1e4]; 200 parcel bootstrap resampling for 95% confidence interval.
 
 ### Code
 
