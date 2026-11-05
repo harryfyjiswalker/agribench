@@ -128,9 +128,22 @@ Fold 1 parcels: 17,229
 Loaded Sentinel-2 parcel: (46, 10, 32) (acquisitions, bands, pixels)
 ```
 
-4. Evaluate your model
+4. Add your model or feature set
+
+
+
+
+
+
+
+
+
+
+
+
+
+5. Evaluate your model
 ```
-export model=my-model
 
 test -r "$work/pastis-r/features/$model.npz" &&
 test -r "$work/pastis-r/features/$model.json" &&
