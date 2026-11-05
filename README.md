@@ -194,5 +194,10 @@ e. Add your own model
 
 
 
+To add:
+- Inputs etc.
+
+
+
 
 
