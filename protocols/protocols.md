@@ -1,7 +1,5 @@
 # Datasets and Evaluation Protocols
 
-
-
 ## Crop Type Classification
 
 ### Datasets
@@ -11,14 +9,28 @@
 
 ### Evaluation 
 
-_In-distribution Evaluation:_ 
+Cross-validation: 
+- In-domain performance: PASTIS-R (5-fold CV, using pre-determined folds):
+  - Frozen: Uses [Geo Eval Harness](https://github.com/torchgeo/geo-eval-harness) configuration, with an L2-regularised logistic probe trained on folds 1-3 with fold 4 as validation and fold 5 as testing.
+ 
 
-ssdfsdf
+
+
+- Out-of-distribution: PLATEUR (leave-one-region-out CV)
+
+Evaluation:
+- Frozen: 
+For evaluation on frozen features, 
+
 ### Limitations
 
 - Currently lacking capacity for understanding of temporal generalisation (both are 2018-2019 growing seasons)
 
 ## Crop Yield Prediction
+
+### Datasets
+
+- [YieldSAT](https://yieldsat.github.io) (Miranda _et al._, 2026)
 
 
 
