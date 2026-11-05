@@ -35,10 +35,9 @@ fi
 ```
 cd "$HOME/projects/agribench"
 
+export project=/lustre/shared/agriscience-benchmark
 export work="${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench}"
 export bench="$work/venv/bin/python"
-
-"$bench" --version
 ```
 
 ## Crop Type Classification
