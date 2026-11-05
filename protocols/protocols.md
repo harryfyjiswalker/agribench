@@ -1,5 +1,46 @@
 # Datasets and Evaluation Protocols
 
+## Setup from scratch
+
+1. Login to Annuna
+```
+ssh USERNAME@login.anunna.wur.nl
+```
+
+2. Clone AgriBench and set paths.
+```
+mkdir -p "$HOME/projects"
+git clone https://github.com/harryfyjiswalker/agribench.git "$HOME/projects/agribench"
+cd "$HOME/projects/agribench"
+
+export work="${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench}"
+export bench="$work/venv/bin/python"
+```
+
+3. Create environment
+```
+mkdir -p "$work"
+
+if command -v python3.12 >/dev/null; then
+  python3.12 -m venv "$work/venv"
+else
+  /lustre/shared/agriscience-benchmark/envs/benchmark-v1/bin/python -m venv "$work/venv"
+fi
+```
+
+## Returning to Anunna
+
+1. Log in, and run:
+
+```
+cd "$HOME/projects/agribench"
+
+export work="${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench}"
+export bench="$work/venv/bin/python"
+
+"$bench" --version
+```
+
 ## Crop Type Classification
 
 ### Datasets
