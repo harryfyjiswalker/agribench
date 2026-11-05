@@ -11,21 +11,12 @@ ssh USERNAME@login.anunna.wur.nl
 ```
 mkdir -p "$HOME/projects"
 git clone https://github.com/harryfyjiswalker/agribench.git "$HOME/projects/agribench"
-cd "$HOME/projects/agribench"
-
-export work="${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench}"
-export bench="$work/venv/bin/python"
 ```
 
 3. Create environment
 ```
-mkdir -p "$work"
-
-if command -v python3.12 >/dev/null; then
-  python3.12 -m venv "$work/venv"
-else
-  /lustre/shared/agriscience-benchmark/envs/benchmark-v1/bin/python -m venv "$work/venv"
-fi
+cd "$HOME/projects/agribench"
+export project=/lustre/shared/agriscience-benchmark
 ```
 
 ## Returning to Anunna
@@ -34,10 +25,7 @@ fi
 
 ```
 cd "$HOME/projects/agribench"
-
 export project=/lustre/shared/agriscience-benchmark
-export work="${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench}"
-export bench="$work/venv/bin/python"
 ```
 
 ## Crop Type Classification
@@ -60,12 +48,82 @@ This uses harness defaults of 40 log-spaced regularisation values in range [1e-6
 1. Select PASTIS-R
 ```
 export data="${AGRIBENCH_DATA:-/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet}"
-
-head -n 1 "$data/metadata_parcel.csv" &&
-test -r "$data/metadata.geojson" &&
-mkdir -p "$work/pastis-r"/{features,runs} &&
-"$bench" -c 'from geo_eval_harness.main import select_logistic_c; print("PASTIS-R setup OK")'
+export work="${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench-probe}"
+export bench="$work/venv/bin/python"
 ```
+
+2. If you have not installed probe previously, run this:
+```
+(
+  set -eu
+  mkdir -p "$work"
+
+  if [ ! -x "$bench" ]; then
+    if command -v python3.12 >/dev/null; then
+      python3.12 -m venv "$work/venv"
+    else
+      "$project/envs/benchmark-v1/bin/python" -m venv "$work/venv"
+    fi
+  fi
+
+  "$bench" -m pip install --index-url https://download.pytorch.org/whl/cu128 \
+    'torch==2.8.0' 'torchvision==0.23.0'
+
+  "$bench" -m pip install geopandas scipy \
+    'geo-eval-harness @ git+https://github.com/torchgeo/geo-eval-harness.git@a782d730ab4dbdb9f9c0ae05ac7fe893e739be03'
+
+  "$bench" -m pip check
+)
+```
+
+3. Verify working,.
+```
+(
+  set -eu
+
+  head -n 1 "$data/metadata_parcel.csv"
+  test -r "$data/metadata.geojson"
+  test -r "$project/upstream/pastis-benchmark/code/dataloader_pixelset.py"
+  "$bench" -c 'from geo_eval_harness.main import select_logistic_c; print("PASTIS-R setup OK")'
+
+  mkdir -p "$work/pastis-r"/{features,runs,logs}
+  logs="$work/pastis-r/logs"
+
+  status=0
+  job=$(sbatch --wait --parsable --partition=main --time=00:10:00 --mem=4G \
+    --job-name=pastis-load --output="$logs/load-%j.log" <<'SLURM'
+#!/bin/bash
+set -eu
+export PYTHONPATH="$project/upstream/pastis-benchmark/code"
+
+"$bench" -u - <<'PY'
+import os
+
+from dataloader_pixelset import PASTIS_Dataset_PixelSet
+
+dataset = PASTIS_Dataset_PixelSet(
+    folder=os.environ["data"],
+    sats=["S2"],
+    folds=[1],
+    norm=False,
+    geom_features=False,
+)
+sample = dataset[0]
+pixels, _ = sample["S2"]
+print(f"Fold 1 parcels: {len(dataset):,}")
+print(f"Loaded Sentinel-2 parcel: {tuple(pixels.shape)} (acquisitions, bands, pixels)")
+PY
+SLURM
+  ) || status=$?
+
+  if [ -n "$job" ]; then
+    cat "$logs/load-${job%%;*}.log"
+  fi
+  exit "$status"
+)
+```
+
+  
 
 2. If "PASTIS-R setup OK"
 
