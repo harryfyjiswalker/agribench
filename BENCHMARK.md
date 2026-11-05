@@ -1,5 +1,7 @@
 # Benchmark protocol
 
+The [PASTIS-R frozen linear-probe protocol](protocols/pastis-r-linear-probe.md) is a draft for the separate fold-5 test track.
+
 The adapted PSE + L-TAE baseline uses official fold membership and a pilot rotation. Train on folds 1–3, validate on 4, reserve 5. The loader supplies training-fold normalization for both splits. Batches have equal acquisition counts and retain individual dates. Training merges a one-parcel remainder into its preceding batch and skips buckets containing only one parcel because of BatchNorm. Metrics record the actual train count. Validation keeps all parcels unless max_batches is explicitly set.
 
 ## Standardised tabular comparison
