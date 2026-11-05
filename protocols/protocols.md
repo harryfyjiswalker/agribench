@@ -76,7 +76,7 @@ export bench="$work/venv/bin/python"
 )
 ```
 
-3. Verify working,.
+3. Verify working by running the following,
 ```
 (
   set -eu
@@ -122,10 +122,14 @@ SLURM
   exit "$status"
 )
 ```
+and observing:
+```
+Done.
+Dataset ready.
+Fold 1 parcels: 17,229
+Loaded Sentinel-2 parcel: (46, 10, 32) (acquisitions, bands, pixels)
+```
 
-  
-
-2. If "PASTIS-R setup OK"
 
 
 ### Out-of-Distribution Crop Type Classification
