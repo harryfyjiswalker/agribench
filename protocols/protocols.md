@@ -11,7 +11,7 @@
 
 Cross-validation: 
 - In-domain performance: PASTIS-R (5-fold CV, using pre-determined folds):
-  - Frozen: Uses [Geo Eval Harness](https://github.com/torchgeo/geo-eval-harness) configuration, with an L2-regularised logistic probe trained on folds 1-3 with fold 4 as validation and fold 5 as testing.
+  - Frozen Feature Set/ Embedding: Uses [Geo Eval Harness](https://github.com/torchgeo/geo-eval-harness) configuration, with an L2-regularised logistic probe trained on folds 1-3 with fold 4 as validation and fold 5 as testing.
     
         ```
         python -m pip install \
