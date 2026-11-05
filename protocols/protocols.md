@@ -33,13 +33,13 @@ export project=/lustre/shared/agriscience-benchmark
 ### In-Domain Crop Type Classification
 
 - [PASTIS-R](https://zenodo.org/records/5745151) (Garnot and Landrieu, 2021)
-  - A benchmark that supports parcel-based crop type classification, comprising 124,422 individual parcels and 18 crop types in metropolitan France. The benchmark covers one year, the September 2018 to November 2019 growing season. PASTIS can be used for in-distribution scoring, using the pre-determined five folds provided by the dataset maintainers. 
+  - A benchmark that supports parcel-based crop type classification, comprising 85,951 individual parcels and 18 crop types in metropolitan France. The benchmark covers one year, the September 2018 to November 2019 growing season. PASTIS can be used for in-distribution scoring, using the pre-determined five folds provided by the dataset maintainers. 
 
 ### Evaluation 
 
 Cross-validation: 
 - In-domain performance: PASTIS-R (5-fold CV, using pre-determined folds):
-  - Frozen Feature Set/ Embedding: Uses [Geo Eval Harness](https://github.com/torchgeo/geo-eval-harness) configuration for frozen embeddings, with an L2-regularised logistic probe trained on folds 1-3 with fold 4 as validation and fold 5 as testing. This uses harness defaults of 40 log-spaced regularisation values in range [1e-6, 1e4]; 200 parcel bootstrap resampling for 95% confidence interval.
+  - Frozen Feature Set/ Embedding: Uses [Geo Eval Harness](https://github.com/torchgeo/geo-eval-harness) configuration for frozen embeddings. This fits an L2-regularised logistic probe on folds 1–3, select C by accuracy on fold 4, refit on folds 1–4, and score fold 5. The hyperparameter sweep uses 40 log-spaced C values in [1e-6, 1e4] & reports parcel accuracy with a 95% interval from 200 parcel bootstrap resamples, plus macro F1 and parcel mIoU.
 
 ### Code
 
@@ -120,7 +120,7 @@ SLURM
   exit "$status"
 )
 ```
-and observing:
+and observing something of the order:
 ```
 Done.
 Dataset ready.
@@ -128,6 +128,33 @@ Fold 1 parcels: 17,229
 Loaded Sentinel-2 parcel: (46, 10, 32) (acquisitions, bands, pixels)
 ```
 
+4. Evaluate your model
+```
+export model=my-model
+
+test -r "$work/pastis-r/features/$model.npz" &&
+test -r "$work/pastis-r/features/$model.json" &&
+job=$(sbatch --parsable --partition=gpu --gres=gpu:1 --cpus-per-task=2 \
+  --mem=32G --time=04:00:00 \
+  --output="$work/pastis-r/logs/probe-%j.log" \
+  --wrap='exec "$bench" -u tools/evaluate_parcel_probe.py \
+    --metadata "$data/metadata_parcel.csv" \
+    --features "$work/pastis-r/features/$model.npz" \
+    --recipe "$work/pastis-r/features/$model.json" \
+    --out "$work/pastis-r/runs/$model"') &&
+echo "Submitted job $job"
+```
+
+5. Monitor and read result:
+```
+sacct -j "${job%%;*}" --format=JobID,State,ExitCode,Elapsed
+```
+
+```
+cat "$work/pastis-r/runs/$model/metrics.json"
+```
+
+   
 
 
 ### Out-of-Distribution Crop Type Classification
