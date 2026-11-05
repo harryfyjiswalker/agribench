@@ -1,20 +1,19 @@
-# PASTIS-R parcel classification with a frozen linear probe
+# PASTIS-R parcel classification 
 
-**Protocol ID:** `pastis-r-s2-linear-probe-v1`
+## Task and splits
 
-**Status:** Draft for review before implementation or fold-5 scoring.
+The PASTIS-R PixelSet v1 ([Zenodo release](https://doi.org/10.5281/zenodo.5745151)) allows 
 
-## Question and scope
 
-How much does a frozen Galileo Base representation add to the same Sentinel-2
-parcel time series used by a simple linear baseline? The comparison uses one
-prediction per known parcel, with 18 crop classes. The first two entries are
-30-day parcel medians and Galileo Base embeddings derived from those medians.
-The GeoBench V2 PASTIS pixel segmentation task has a separate protocol.
+
+
+
+
+
 
 ## Data and splits
 
-Use PASTIS-R PixelSet v1 ([Zenodo release](https://doi.org/10.5281/zenodo.5745151))
+Use PASTIS-R PixelSet v1 
 and its published parcel IDs, labels and folds. Use Sentinel-2 only, with bands
 B02, B03, B04, B05, B06, B07, B08, B8A, B11 and B12 in that order.
 
