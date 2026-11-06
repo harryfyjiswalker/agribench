@@ -1,0 +1,6 @@
+# Standard protocol: tune on fold 4, refit on folds 1-4, score fold 5 once.
+name: final
+mode: test
+train_folds: [1, 2, 3]
+val_folds: [4]
+test_folds: [5]

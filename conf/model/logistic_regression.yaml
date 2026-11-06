@@ -7,3 +7,6 @@ estimator:
       solver: lbfgs
       C: 1.0
       max_iter: 1000
+search:
+  param_grid:
+    logisticregression__C: [0.01, 0.1, 1.0, 10.0]

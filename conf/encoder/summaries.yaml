@@ -1,0 +1,5 @@
+adapter: tools.adapters.summaries:extract
+version: "1"
+input_format: s2-parcel-medians-v1
+normalization: none
+pooling: none (flattened monthly parcel medians; unobserved months are NaN)

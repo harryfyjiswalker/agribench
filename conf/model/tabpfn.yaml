@@ -1,6 +1,6 @@
 name: tabpfn
 estimator:
   _target_: tabpfn.TabPFNClassifier
-  model_path: ???
+  model_path: ${oc.env:AGRIBENCH_TABPFN_CKPT,/lustre/shared/agriscience-benchmark/checkpoints/tabpfn/tabpfn-v3.5-fast-20260909.safetensors}
   device: cuda
   random_state: ${experiment.seed}

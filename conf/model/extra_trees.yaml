@@ -1,0 +1,10 @@
+name: extra_trees
+estimator:
+  _target_: sklearn.ensemble.ExtraTreesClassifier
+  n_estimators: 100
+  n_jobs: ${oc.decode:${oc.env:SLURM_CPUS_PER_TASK,2}}
+  random_state: ${experiment.seed}
+search:
+  param_grid:
+    max_features: [sqrt, 0.3]
+    min_samples_leaf: [1, 3]
