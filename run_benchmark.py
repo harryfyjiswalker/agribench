@@ -102,11 +102,12 @@ def main(cfg):
 
     v = cfg.validation
     train_f, val_f, test_f = (list(v[k]) for k in ("train_folds", "val_folds", "test_folds"))
-    if sorted(train_f + val_f + test_f) != [1, 2, 3, 4, 5]:
-        raise ValueError("Train, validation and test folds must partition folds 1-5")
+    all_f = train_f + val_f + test_f
+    if len(set(all_f)) != len(all_f) or not set(all_f) <= {1, 2, 3, 4, 5}:
+        raise ValueError("Train, validation and test folds must be disjoint folds from 1-5")
     test_mode = v.get("mode", "dev") == "test"
     smoke = bool(cfg.experiment.smoke)
-    if test_mode and not smoke and not cfg.experiment.confirm_test:
+    if test_mode and not smoke and 5 in test_f and not cfg.experiment.confirm_test:
         raise SystemExit("validation=final scores the reserved test fold 5. "
                          "Re-run with experiment.confirm_test=true if you mean to.")
     seed = int(cfg.experiment.seed)
@@ -148,7 +149,7 @@ def main(cfg):
     if test_mode:
         tune_idx = np.concatenate([tr, va])
         fit_idx, eval_idx = (tr if smoke else tune_idx), te
-        split = "smoke-plumbing" if smoke else "test"
+        split = "smoke-plumbing" if smoke else ("test" if 5 in test_f else "rehearsal")
         search = cfg.model.get("search")
         grid = OmegaConf.to_container(search.param_grid, resolve=True) if search and "param_grid" in search else {}
         if grid:
@@ -167,7 +168,7 @@ def main(cfg):
                           "macro_iou": res["mean_test_score"]}).to_csv(out / "tuning.csv", index=False)
         model = clone(pipe).set_params(**{f"model__{k}": val for k, val in best.items()})
     else:
-        fit_idx, eval_idx, split = tr, va, "validation"
+        fit_idx, eval_idx, split = tr, va, ("smoke-validation" if smoke else "validation")
         model = clone(pipe)
 
     if np.intersect1d(fit_idx, eval_idx).size:

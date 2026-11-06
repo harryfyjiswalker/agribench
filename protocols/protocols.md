@@ -176,3 +176,20 @@ end of season?
 
 
 
+
+## Standard runner protocol (all heads)
+
+Implemented by `run_benchmark.py` (PASTIS-R parcel classification, 18 classes, predefined folds).
+
+- Development (`validation=pilot`): fit with the head's default settings on folds 1-3, score fold 4.
+- Test (`validation=final`): choose the head's hyperparameters with fits on folds 1-3 scored on fold 4
+  (grid in the model's YAML, selected by macro IoU), refit on folds 1-4, score fold 5 once. Heads without a
+  grid are fit once with their defaults. Needs `experiment.confirm_test=true`; each run is appended to
+  `test-ledger.jsonl`.
+- Rehearsal (`validation=rehearsal`): the test procedure shifted one fold earlier (tune on fold 3, refit on
+  folds 1-3, score fold 4). It never touches fold 5.
+- Metrics: accuracy, macro IoU and macro F1 over the 18 classes, computed with scikit-learn from the saved predictions.
+- Seeds: one seed per run (default 42). Neural heads hold out 10% of their training rows for early stopping.
+
+This differs from the geo-eval-harness linear probe above (C selected by accuracy over a 40-value grid,
+`evaluate.sbatch`), which remains a separate, harness-compatible protocol.

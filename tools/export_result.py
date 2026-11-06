@@ -23,7 +23,7 @@ def csv_ids(path):
 
 def export(run, label):
     cfg = yaml.safe_load((run / "resolved.yaml").read_text())
-    if cfg["experiment"].get("max_batches") is not None:
+    if cfg["experiment"].get("max_batches") is not None or cfg["experiment"].get("smoke"):
         raise ValueError("Smoke checks do not belong on the leaderboard")
     metrics = json.loads((run / "metrics.json").read_text())
     # The training loop saves predictions from the earliest best validation epoch.

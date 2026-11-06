@@ -1,0 +1,9 @@
+adapter: tools.adapters.presto:extract
+version: "1"
+input_format: s2-parcel-medians-location-v1
+source:
+  repository: https://github.com/nasaharvest/presto.git
+  revision: 11e207a668a34336ced1d8e492a1bd5849b96c4a
+weights_note: data/default_model.pt inside the pinned source checkout (sha256 559c9d76f525bdf2dd3774da8b1e7f1510769b73baacac12e9e4d8d5c67fbe65)
+normalization: Sentinel-2 reflectance / 10000; NDVI from B8 and B4; Presto pipeline constants
+pooling: Presto encoder eval-task output (mean over visible tokens plus the location token), 128-d
