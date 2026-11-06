@@ -1,0 +1,7 @@
+# Rehearsal of the final protocol that never touches fold 5:
+# tune on fold 3, refit on folds 1-3, score fold 4 (same data as validation=pilot).
+name: rehearsal
+mode: test
+train_folds: [1, 2]
+val_folds: [3]
+test_folds: [4]
