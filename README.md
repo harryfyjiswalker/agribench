@@ -64,6 +64,81 @@ cd "$HOME/projects/agribench"
 export project=/lustre/shared/agriscience-benchmark
 ```
 
+# Using the benchmark with presets
+
+## PASTIS-R
+
+1. Set dataset and environment paths,
+```
+export data="${AGRIBENCH_DATA:-/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet}"
+export work="${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench-probe}"
+export bench="$work/venv/bin/python"
+```
+2. Then, by running the following, you can view the possible,
+- Input feature representations: ```find conf/input/pastis-r -name '*.yaml'```   ;
+- Encoders, if desired: ```find conf/encoder -name '*.yaml' ```;
+- and, classifiers: ? ;
+
+
+3. You can then select choices by running
+```
+selection=(encoder=XXX input=XXX)
+representation=galileo-base--pastis-r-s2-parcel-medians
+features_dir="$work/pastis-r/features"
+
+"$bench" -m tools.extract_representation "${selection[@]}" --check-config
+```
+
+For example, for encoder = galileo-base and feature input = s2-parcel-medians, you can run:
+```
+selection=(encoder=galileo-base input=pastis-r/s2-parcel-medians)
+representation=galileo-base--pastis-r-s2-parcel-medians
+features_dir="$work/pastis-r/features"
+
+"$bench" -m tools.extract_representation "${selection[@]}" --check-config
+```
+
+4. Check if the encoder has already been run:
+```
+for dir in "$features_dir" "$project/features/pastis-r/parcel-probe-v1"; do
+  if [ -r "$dir/$representation.npz" ] && [ -r "$dir/$representation.json" ]; then
+    features_dir="$dir"
+    printf 'Found feature pair in %s\n' "$features_dir"
+    break
+  fi
+done
+```
+
+If so, skip to step 6. Otherwise,
+
+5. 
+
+
+
+To run a smoke test to check all is running, you can run:
+
+
+
+And then to run a full experiment, you can run:
+
+
+
+
+by running the following:
+
+1. To view th
+
+
+
+
+
+1. Select a dataset
+
+
+# Contributing
+
+To contribute an encoder 
+
 
 
 
