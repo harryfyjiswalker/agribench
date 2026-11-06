@@ -100,9 +100,15 @@ def embedding_table(path, ids, representation):
             or not np.isfinite(features).all()):
         raise ValueError("Expected a finite floating-point embedding vector per parcel")
     order = np.argsort(parcel_ids)
-    if not np.array_equal(parcel_ids[order], ids):
-        raise ValueError("Embeddings must contain exactly one row for each train and validation parcel")
-    return features[order], {"file": str(path), "sha256": sha256, "representation": representation}
+    sorted_ids = parcel_ids[order]
+    if len(np.unique(sorted_ids)) != len(sorted_ids):
+        raise ValueError("Embedding IDs must be unique")
+    pos = np.clip(np.searchsorted(sorted_ids, ids), 0, len(sorted_ids) - 1)
+    if not np.array_equal(sorted_ids[pos], ids):
+        raise ValueError("Embeddings are missing train or validation parcels")
+    return features[order][pos], {"file": str(path), "sha256": sha256,
+                                  "representation": representation,
+                                  "rows_in_file": int(len(parcel_ids))}
 
 
 def run(cfg, folds, out, loader, score_predictions):
