@@ -137,16 +137,3 @@ next versioned environment. Your own copy:
 
 Only `pilot` runs can be exported (not smoke runs). The leaderboard above rebuilds automatically after the push.
 Without push access, fork the repo and open a pull request.
-
-## Troubleshooting
-
-- "No feature table at ...": extract that encoder first (section 6).
-- A job vanished from `squeue --me`: read `slurm-<jobid>.out`; `sacct -j <jobid>` shows its final state.
-- "Permission denied" under `$project`: ask the maintainer to add you to the folder's access list.
-
-## Limits (today)
-
-PASTIS-R only. Frozen encoders plus scikit-learn-compatible heads; models trained end-to-end on raw pixel sets
-(for example PSE+L-TAE) are not in this runner yet (`run_experiments.py` and `BENCHMARK.md` cover the original
-runs). One seed per run; differences below about 0.01-0.02 mIoU are within noise. `evaluate.sbatch` runs the
-geo-eval-harness linear probe (`protocols/protocols.md`); it scores fold 5, so use it sparingly.
