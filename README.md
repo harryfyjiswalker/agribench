@@ -36,98 +36,117 @@ ________________________________________________________________________________
 
 # Setup
 
-You need an Anunna account in the AIN group. Shared files live in
-`/lustre/shared/agriscience-benchmark` (called `$project` below): the Python environment, feature
-tables, checkpoints, upstream code and run outputs.
+## 1. Log in
 
-## Get the code
+    ssh USERNAME@login.anunna.wur.nl
+
+Replace `USERNAME` with your WUR username (off campus you may need the WUR VPN). You need access to the
+`AIN` group. The login node is for light work only: run anything heavy with `sbatch`.
+
+## 2. Get the code
 
     mkdir -p ~/projects && cd ~/projects
     git clone https://github.com/harryfyjiswalker/agribench.git
     cd agribench
+    export project=/lustre/shared/agriscience-benchmark    # shared files; set again in each new session
 
-## Run an experiment (PASTIS-R)
-
-An experiment is four choices, each a config group:
-
-| Group | Meaning | Options today |
-|---|---|---|
-| `encoder=` | how parcels become feature vectors | `galileo-base`, `summaries`, `presto-base` |
-| `input=` | which prepared input the encoder reads | `pastis-r/s2-parcel-medians` (galileo-base, summaries), `pastis-r/s2-parcel-medians-location` (presto-base) |
-| `model=` | the classifier head | `logistic_regression`, `rf`, `extra_trees`, `xgboost`, `mlp` (Lightning), `tabpfn` (GPU) |
-| `validation=` | the protocol | `pilot` (default), `final`, `rehearsal` |
+## 3. Run an experiment (PASTIS-R)
 
     sbatch bench.sbatch encoder=galileo-base input=pastis-r/s2-parcel-medians model=xgboost validation=pilot
 
-`validation=pilot` is the development protocol: train on folds 1-3, score fold 4.
+| Choice | Options |
+|---|---|
+| `encoder=` | `galileo-base`, `summaries` (raw monthly bands), `presto-base` |
+| `input=` | `pastis-r/s2-parcel-medians` (galileo-base, summaries); `pastis-r/s2-parcel-medians-location` (presto-base) |
+| `model=` | `logistic_regression`, `rf`, `extra_trees`, `xgboost`, `lightgbm`, `mlp`, `tabpfn` |
+| `validation=` | `pilot` (default), `rehearsal`, `final` |
 
-`validation=final` is the test protocol: tune on fold 4 (macro IoU, small grid in the model's YAML), refit
-on folds 1-4, score the reserved fold 5 once. It needs `experiment.confirm_test=true`, and each run is
-appended to `$project/runs/pastis/test-ledger.jsonl`. Never use fold 5 to choose models.
-`validation=rehearsal` runs the same tune-and-refit procedure one fold earlier (tune on fold 3, score fold 4), so you can try it without touching fold 5.
+- `pilot`: train on folds 1-3 with default settings, score fold 4.
+- `rehearsal`: tune on fold 3 (grid in the model's YAML, macro IoU), refit on folds 1-3, score fold 4. The `final`
+  procedure shifted one fold earlier, so it never touches fold 5.
+- `final`: tune on fold 4, refit on folds 1-4, score fold 5 once. Needs `experiment.confirm_test=true`; each run is
+  logged in `$project/runs/pastis/test-ledger.jsonl`. Fold 5 is reserved: never use it to choose models.
+- Add `experiment.smoke=true` to check the plumbing on a few thousand parcels (scores are meaningless).
 
-Add `experiment.smoke=true` to check the plumbing on a few thousand parcels. Smoke runs never read fold-5
-labels, and their scores are meaningless.
+`tabpfn` needs a GPU (`mlp` can use one): add `--partition=gpu --gres=gpu:1 --mem=32G` after `sbatch`.
 
-GPU models:
-
-    sbatch --partition=gpu --gres=gpu:1 --mem=32G bench.sbatch encoder=galileo-base input=pastis-r/s2-parcel-medians model=tabpfn validation=pilot
-
-Many at once (every encoder x every model, in parallel):
+Many at once (every encoder x every model, in parallel; set `INPUT=` for Presto, `SBATCH_ARGS=` for GPUs):
 
     bash tools/sweep.sh "galileo-base summaries" "logistic_regression rf xgboost" validation=pilot
 
-Check jobs with `squeue --me`. Results go to `$project/runs/pastis/$USER/<time>-<jobid>/` (`metrics.json`,
-predictions, resolved config). The Slurm log is `slurm-<jobid>.out` in the folder you submitted from.
-If the feature table for your encoder/input pair does not exist, the runner stops and prints the extraction command.
-
-To see everyone's runs in one table (smoke runs hidden):
+Follow jobs with `squeue --me`; the log is `slurm-<jobid>.out` in the folder you submitted from. Most pilot runs
+take under 10 minutes. Everyone's runs in one table (add `--smoke` to include smoke runs):
 
     $project/envs/benchmark-v2/bin/python tools/results.py
 
-## Python environment
+Each run writes `$project/runs/pastis/$USER/<time>-<jobid>/` with `metrics.json` (accuracy, macro IoU, macro F1),
+predictions and the resolved config.
 
-Everyone uses the shared read-only environment `$project/envs/benchmark-v2`; the batch scripts already point
-at it. Do not pip install into it. To add a package, edit `envs/benchmark-v2.lock.txt` in a pull request.
-To build your own copy:
+## 4. Where things live
+
+| Path | Contents |
+|---|---|
+| `$project/envs/benchmark-v2` | shared Python environment (read-only) |
+| `$project/features/pastis-r/parcel-probe-v1` | extracted encoder features, one `.npz` per encoder and input |
+| `$project/inputs/pastis-r` | prepared inputs the encoders read |
+| `$project/checkpoints`, `$project/upstream` | model weights and pinned encoder source code |
+| `$project/runs/pastis` | run outputs and the fold-5 ledger |
+
+The PASTIS-R data path is set in `conf/dataset/pastis_s2.yaml`. Environment overrides: `AGRIBENCH_DATA`,
+`AGRIBENCH_FEATURES`, `AGRIBENCH_RUNS`, `AGRIBENCH_PROJECT`, `AGRIBENCH_TABPFN_CKPT`, `BENCHMARK_PYTHON`.
+
+## 5. Add a model (classifier head)
+
+Copy `conf/model/lightgbm.yaml`: set `name`, an `estimator` (any scikit-learn-compatible class via `_target_`) and
+optionally `search.param_grid` (used by `rehearsal` and `final`). Then run it with `model=<name>`. The package must
+be in the shared environment (section 7). Neural heads: see `agribench_heads.py`.
+
+## 6. Add an encoder
+
+1. Copy `tools/adapters/template.py` and implement `extract(...) -> (parcel_ids, features)` (see `presto.py`).
+2. Add `conf/encoder/<name>.yaml`; pin the source revision and weights hash as the existing ones do.
+3. Check 8 parcels (add `--source-dir`/`--weights-dir` if the encoder needs them), then extract everything once
+   on a GPU. Presto example (`<DATA>` is the PASTIS-R_PixelSet folder):
+
+       python -m tools.extract_representation encoder=presto-base input=pastis-r/s2-parcel-medians-location \
+         --inputs $project/inputs/pastis-r/pastis-s2-and-location.npz --metadata <DATA>/metadata_parcel.csv \
+         --source-dir $project/upstream/presto --device cpu --smoke
+
+       sbatch --partition=gpu --gres=gpu:1 --mem=32G extract.sbatch encoder=presto-base \
+         input=pastis-r/s2-parcel-medians-location --inputs $project/inputs/pastis-r/pastis-s2-and-location.npz \
+         --metadata <DATA>/metadata_parcel.csv --source-dir $project/upstream/presto \
+         --output-dir $project/features/pastis-r/parcel-probe-v1
+
+   Galileo also needs `--weights-dir $project/checkpoints/galileo/base`. Extraction refuses to overwrite an
+   existing table. The result is shared, so every encoder after that runs with `encoder=<name>`.
+
+## 7. Python environment
+
+Everyone uses the shared read-only `$project/envs/benchmark-v2`; the batch scripts already point at it. Do not pip
+install into it. To add a package, edit `envs/benchmark-v2.lock.txt` in a pull request; the maintainer builds the
+next versioned environment. Your own copy:
 
     python3 -m venv ~/myenv
     ~/myenv/bin/pip install --extra-index-url https://download.pytorch.org/whl/cu128 -r envs/benchmark-v2.lock.txt
+    BENCHMARK_PYTHON=~/myenv/bin/python sbatch bench.sbatch ...
 
-## Add an encoder
-
-1. Copy `tools/adapters/template.py` to `tools/adapters/<name>.py` and implement `extract` (see `galileo.py` or `presto.py`).
-2. Add `conf/encoder/<name>.yaml` (adapter, input format, pinned source and weights if any).
-3. Extract once; the table is then shared. Try `--smoke` first (8 parcels, seconds). Example for Galileo:
-
-       data=/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet
-       sbatch --partition=gpu --gres=gpu:1 --mem=32G extract.sbatch encoder=galileo-base input=pastis-r/s2-parcel-medians \
-         --inputs $project/inputs/pastis-r/pastis-s2-and-location.npz --metadata $data/metadata_parcel.csv \
-         --source-dir $project/upstream/galileo --weights-dir $project/checkpoints/galileo/base \
-         --output-dir $project/features/pastis-r/parcel-probe-v1
-
-## Add a model
-
-Add `conf/model/<name>.yaml` with `name`, an `estimator` (any scikit-learn-compatible class via `_target_`) and
-optionally `search.param_grid` (used by `validation=final`). For neural heads see `agribench_heads.py`.
-
-## Publish a validation result
+## 8. Publish a validation result
 
     $project/envs/benchmark-v2/bin/python tools/export_result.py <run folder> <short-name>
     git add results/<short-name>.json && git commit -m "Add <short-name>" && git push
 
-Use lowercase letters, digits, - or _. The leaderboard above is rebuilt automatically after the push.
+Only `pilot` runs can be exported (not smoke runs). The leaderboard above rebuilds automatically after the push.
+Without push access, fork the repo and open a pull request.
 
-## Other tools
+## Troubleshooting
 
-`evaluate.sbatch` runs the geo-eval-harness linear probe (`protocols/protocols.md`). It scores the reserved
-fold 5, so use it sparingly. The older `run_experiments.py` (PSE+L-TAE, the original leaderboard runs) is
-described in `BENCHMARK.md`.
+- "No feature table at ...": extract that encoder first (section 6).
+- A job vanished from `squeue --me`: read `slurm-<jobid>.out`; `sacct -j <jobid>` shows its final state.
+- "Permission denied" under `$project`: ask the maintainer to add you to the folder's access list.
 
-## Known limits (today)
+## Limits (today)
 
-- PASTIS-R only; other tasks come later.
-- Heads are scikit-learn-compatible (including the Lightning MLP). Models that train end-to-end on raw pixel sets (for example PSE+L-TAE) are not part of this runner yet.
-- Encoders are frozen: features are extracted once, then heads are trained on them.
-- One seed per run by default. Differences below about 0.01-0.02 mIoU are within noise.
-- `validation=final` has been exercised in smoke mode and through `validation=rehearsal`; its first real run is the first fold-5 result.
+PASTIS-R only. Frozen encoders plus scikit-learn-compatible heads; models trained end-to-end on raw pixel sets
+(for example PSE+L-TAE) are not in this runner yet (`run_experiments.py` and `BENCHMARK.md` cover the original
+runs). One seed per run; differences below about 0.01-0.02 mIoU are within noise. `evaluate.sbatch` runs the
+geo-eval-harness linear probe (`protocols/protocols.md`); it scores fold 5, so use it sparingly.
