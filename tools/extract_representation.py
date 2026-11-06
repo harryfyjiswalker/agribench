@@ -91,6 +91,32 @@ def save(output_dir, name, ids, features, recipe):
             raise
 
 
+def smoke(adapter, options, inputs, arrays, sample_arrays, expected_ids):
+    if "ids" not in sample_arrays or not set(sample_arrays).issubset(arrays):
+        raise ValueError("For --smoke, declare sample_arrays including ids in the input YAML")
+    with np.load(inputs, allow_pickle=False) as table:
+        ids = table["ids"]
+        if ids.ndim != 1 or ids.dtype.kind not in "iu" or not len(ids):
+            raise ValueError("Input ids must be a nonempty one-dimensional integer array")
+        selected = np.argsort(ids)[:8]
+        sample_ids = ids[selected]
+        if len(np.unique(sample_ids)) != len(sample_ids) or not np.isin(sample_ids, expected_ids).all():
+            raise ValueError("Smoke sample contains duplicate or unknown parcel IDs")
+        sample = {}
+        for key in arrays:
+            values = table[key]
+            if key in sample_arrays:
+                if values.ndim == 0 or values.shape[0] != len(ids):
+                    raise ValueError(f"Sample array {key} must have one row per input ID")
+                values = values[selected]
+            sample[key] = values
+    with TemporaryDirectory() as directory:
+        batch_path = Path(directory) / "sample.npz"
+        np.savez(batch_path, **sample)
+        result_ids, features = adapter(inputs=batch_path, **options)
+        return check_features(result_ids, features, sample_ids).shape
+
+
 def extract(args):
     preset, name, config, required_arrays = resolve_config(args.selection, args.input)
     for field in ("adapter", "version", "input_profile", "inputs", "preprocessing", "pooling"):
@@ -99,7 +125,12 @@ def extract(args):
     if args.check_config:
         print(f"Compatible configuration: {name}")
         return
-    if any((args.output_dir / f"{name}.{ext}").exists() for ext in ("npz", "json")):
+    sample_arrays = config.get("input_config", {}).get("sample_arrays", [])
+    if args.smoke and not sample_arrays:
+        raise ValueError("--smoke requires a separate input YAML that declares sample_arrays")
+    if not args.smoke and any(
+        (args.output_dir / f"{name}.{ext}").exists() for ext in ("npz", "json")
+    ):
         raise ValueError(f"Output for {name} already exists in {args.output_dir}")
     if not args.inputs.is_file():
         raise FileNotFoundError(args.inputs)
@@ -134,10 +165,15 @@ def extract(args):
         raise ValueError("Use module:function for the adapter")
     module = importlib.import_module(module_name)
     adapter = getattr(module, function_name)
-    ids, features = adapter(
-        inputs=args.inputs.resolve(), weights_dir=weights, source_dir=args.source_dir,
-        device=args.device, batch_size=args.batch_size,
+    options = dict(
+        weights_dir=weights, source_dir=args.source_dir, device=args.device,
+        batch_size=args.batch_size,
     )
+    if args.smoke:
+        rows, width = smoke(adapter, options, args.inputs, required_arrays, sample_arrays, expected_ids)
+        print(f"Smoke passed: {name} returned {rows} vectors of width {width}")
+        return
+    ids, features = adapter(inputs=args.inputs.resolve(), **options)
     features = check_features(ids, features, expected_ids)
     recipe = {
         **config, "name": name, "device": args.device, "batch_size": args.batch_size,
@@ -153,7 +189,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("selection", metavar="encoder=NAME")
     parser.add_argument("input", nargs="?", metavar="input=pastis-r/NAME")
-    parser.add_argument("--check-config", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check-config", action="store_true")
+    mode.add_argument("--smoke", action="store_true", help="Check up to eight parcels")
     parser.add_argument("--inputs", type=Path)
     parser.add_argument("--metadata", type=Path)
     parser.add_argument("--output-dir", type=Path)
@@ -165,8 +203,10 @@ def main():
     args = parser.parse_args()
     if args.batch_size < 1:
         parser.error("--batch-size must be positive")
-    if not args.check_config and None in (args.inputs, args.metadata, args.output_dir):
-        parser.error("Extraction requires --inputs, --metadata and --output-dir")
+    if not args.check_config and None in (args.inputs, args.metadata):
+        parser.error("Extraction and smoke mode require --inputs and --metadata")
+    if not (args.check_config or args.smoke) and args.output_dir is None:
+        parser.error("Full extraction requires --output-dir")
     try:
         extract(args)
     except (OSError, ValueError, KeyError, ImportError, AttributeError,

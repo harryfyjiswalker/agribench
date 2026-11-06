@@ -2,6 +2,7 @@ format: s2-parcel-medians-v1
 input_profile: s2
 inputs: Sentinel-2 parcel observations from PASTIS-R PixelSet v1
 required_arrays: [ids, s2, observed, months, provenance]
+sample_arrays: [ids, s2, observed]
 expected_provenance:
   bands: [B2, B3, B4, B5, B6, B7, B8, B8A, B11, B12]
   reference_date: "2018-09-01"
