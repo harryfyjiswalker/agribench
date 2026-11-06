@@ -1,0 +1,16 @@
+name: xgboost
+estimator:
+  _target_: xgboost.XGBClassifier
+  n_estimators: 300
+  max_depth: 6
+  learning_rate: 0.1
+  subsample: 0.8
+  colsample_bytree: 0.5
+  tree_method: hist
+  device: ${oc.env:XGB_DEVICE,cpu}
+  n_jobs: ${oc.decode:${oc.env:SLURM_CPUS_PER_TASK,2}}
+  random_state: ${experiment.seed}
+search:
+  param_grid:
+    max_depth: [4, 8]
+    learning_rate: [0.05, 0.1]

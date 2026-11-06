@@ -1,0 +1,20 @@
+defaults:
+  - dataset: pastis_s2
+  - model: rf
+  - encoder: null
+  - input: null
+  - validation: final
+  - _self_
+paths:
+  project: ${oc.env:AGRIBENCH_PROJECT,/lustre/shared/agriscience-benchmark}
+  features: ${oc.env:AGRIBENCH_FEATURES,${paths.project}/features/pastis-r/parcel-probe-v1}
+  runs: ${oc.env:AGRIBENCH_RUNS,${paths.project}/runs/pastis}
+experiment:
+  seed: 42
+  smoke: false
+  train_limit: null
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${paths.runs}/${oc.env:USER}/${now:%Y%m%d-%H%M%S}-${oc.env:SLURM_JOB_ID,local}

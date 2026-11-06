@@ -1,4 +1,4 @@
-root: /lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet
+root: ${oc.env:AGRIBENCH_DATA,/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet}
 sensor: S2
 n_pixel: 32
 num_classes: 18
