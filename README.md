@@ -52,10 +52,10 @@ An experiment is four choices, each a config group:
 
 | Group | Meaning | Options today |
 |---|---|---|
-| `encoder=` | how parcels become feature vectors | `galileo-base`, `summaries` |
-| `input=` | which prepared input the encoder reads | `pastis-r/s2-parcel-medians` |
+| `encoder=` | how parcels become feature vectors | `galileo-base`, `summaries`, `presto-base` |
+| `input=` | which prepared input the encoder reads | `pastis-r/s2-parcel-medians` (galileo-base, summaries), `pastis-r/s2-parcel-medians-location` (presto-base) |
 | `model=` | the classifier head | `logistic_regression`, `rf`, `extra_trees`, `xgboost`, `mlp` (Lightning), `tabpfn` (GPU) |
-| `validation=` | the protocol | `pilot` (default), `final` |
+| `validation=` | the protocol | `pilot` (default), `final`, `rehearsal` |
 
     sbatch bench.sbatch encoder=galileo-base input=pastis-r/s2-parcel-medians model=xgboost validation=pilot
 
@@ -64,6 +64,7 @@ An experiment is four choices, each a config group:
 `validation=final` is the test protocol: tune on fold 4 (macro IoU, small grid in the model's YAML), refit
 on folds 1-4, score the reserved fold 5 once. It needs `experiment.confirm_test=true`, and each run is
 appended to `$project/runs/pastis/test-ledger.jsonl`. Never use fold 5 to choose models.
+`validation=rehearsal` runs the same tune-and-refit procedure one fold earlier (tune on fold 3, score fold 4), so you can try it without touching fold 5.
 
 Add `experiment.smoke=true` to check the plumbing on a few thousand parcels. Smoke runs never read fold-5
 labels, and their scores are meaningless.
@@ -80,6 +81,10 @@ Check jobs with `squeue --me`. Results go to `$project/runs/pastis/$USER/<time>-
 predictions, resolved config). The Slurm log is `slurm-<jobid>.out` in the folder you submitted from.
 If the feature table for your encoder/input pair does not exist, the runner stops and prints the extraction command.
 
+To see everyone's runs in one table (smoke runs hidden):
+
+    $project/envs/benchmark-v2/bin/python tools/results.py
+
 ## Python environment
 
 Everyone uses the shared read-only environment `$project/envs/benchmark-v2`; the batch scripts already point
@@ -91,7 +96,7 @@ To build your own copy:
 
 ## Add an encoder
 
-1. Copy `tools/adapters/template.py` to `tools/adapters/<name>.py` and implement `extract` (see `galileo.py`).
+1. Copy `tools/adapters/template.py` to `tools/adapters/<name>.py` and implement `extract` (see `galileo.py` or `presto.py`).
 2. Add `conf/encoder/<name>.yaml` (adapter, input format, pinned source and weights if any).
 3. Extract once; the table is then shared. Try `--smoke` first (8 parcels, seconds). Example for Galileo:
 
@@ -118,3 +123,11 @@ Use lowercase letters, digits, - or _. The leaderboard above is rebuilt automati
 `evaluate.sbatch` runs the geo-eval-harness linear probe (`protocols/protocols.md`). It scores the reserved
 fold 5, so use it sparingly. The older `run_experiments.py` (PSE+L-TAE, the original leaderboard runs) is
 described in `BENCHMARK.md`.
+
+## Known limits (today)
+
+- PASTIS-R only; other tasks come later.
+- Heads are scikit-learn-compatible (including the Lightning MLP). Models that train end-to-end on raw pixel sets (for example PSE+L-TAE) are not part of this runner yet.
+- Encoders are frozen: features are extracted once, then heads are trained on them.
+- One seed per run by default. Differences below about 0.01-0.02 mIoU are within noise.
+- `validation=final` has been exercised in smoke mode and through `validation=rehearsal`; its first real run is the first fold-5 result.
