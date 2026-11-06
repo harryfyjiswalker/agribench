@@ -168,7 +168,7 @@ def main(cfg):
                           "macro_iou": res["mean_test_score"]}).to_csv(out / "tuning.csv", index=False)
         model = clone(pipe).set_params(**{f"model__{k}": val for k, val in best.items()})
     else:
-        fit_idx, eval_idx, split = tr, va, "validation"
+        fit_idx, eval_idx, split = tr, va, ("smoke-validation" if smoke else "validation")
         model = clone(pipe)
 
     if np.intersect1d(fit_idx, eval_idx).size:
