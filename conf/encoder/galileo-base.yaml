@@ -1,0 +1,15 @@
+adapter: tools.adapters.galileo:extract
+version: "1"
+input_format: s2-parcel-medians-v1
+source:
+  repository: https://github.com/nasaharvest/galileo.git
+  revision: 0f0b5b95ac81acef4b74cf4686dc877202f4541b
+weights:
+  repository: nasaharvest/galileo
+  revision: f039dd5dde966a931baeda47eb680fa89b253e4e
+  subfolder: models/base
+  files:
+    encoder.pt: 935f4912f08483d052d69d8e96518f52ef6827fe718a435cb5536fd9bb7737a7
+    config.json: e405397099b02d0c1244e80e74d4b0584b6a35b06f53828ebacf3e75c0c4bcf6
+normalization: "(x - (mean - 2 * std)) / (4 * std), using Galileo upstream statistics"
+pooling: Galileo average_tokens on 1x1 spatial input
