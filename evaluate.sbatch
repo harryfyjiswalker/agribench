@@ -21,7 +21,7 @@ fi
 project=/lustre/shared/agriscience-benchmark
 work=${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench-probe}
 data=${AGRIBENCH_DATA:-/lustre/nobackup/WUR/AIN/fyjis001/datasets/pastis-r-pixelset/extracted/PASTIS-R_PixelSet}
-bench=${BENCHMARK_PYTHON:-$work/venv/bin/python}
+bench=${BENCHMARK_PYTHON:-/lustre/shared/agriscience-benchmark/envs/benchmark-v2/bin/python}
 features=${AGRIBENCH_FEATURES:-$project/features/pastis-r/parcel-probe-v1}
 
 for file in "$features/$representation.npz" "$features/$representation.json"; do
