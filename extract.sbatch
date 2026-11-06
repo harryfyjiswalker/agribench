@@ -8,6 +8,6 @@
 set -eu
 
 work=${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench-probe}
-bench=${BENCHMARK_PYTHON:-$work/venv/bin/python}
+bench=${BENCHMARK_PYTHON:-/lustre/shared/agriscience-benchmark/envs/benchmark-v2/bin/python}
 cd "$SLURM_SUBMIT_DIR"
 exec "$bench" -u -m tools.extract_representation "$@" --device cuda:0

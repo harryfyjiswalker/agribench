@@ -3,7 +3,7 @@ defaults:
   - model: rf
   - encoder: null
   - input: null
-  - validation: final
+  - validation: pilot
   - _self_
 paths:
   project: ${oc.env:AGRIBENCH_PROJECT,/lustre/shared/agriscience-benchmark}
@@ -12,6 +12,7 @@ paths:
 experiment:
   seed: 42
   smoke: false
+  confirm_test: false  # must be true for a real validation=final run (scores fold 5)
   train_limit: null
 hydra:
   job:

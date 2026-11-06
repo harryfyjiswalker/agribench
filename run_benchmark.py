@@ -106,6 +106,9 @@ def main(cfg):
         raise ValueError("Train, validation and test folds must partition folds 1-5")
     test_mode = v.get("mode", "dev") == "test"
     smoke = bool(cfg.experiment.smoke)
+    if test_mode and not smoke and not cfg.experiment.confirm_test:
+        raise SystemExit("validation=final scores the reserved test fold 5. "
+                         "Re-run with experiment.confirm_test=true if you mean to.")
     seed = int(cfg.experiment.seed)
 
     # Fold-5 labels are only read for a real test run.
