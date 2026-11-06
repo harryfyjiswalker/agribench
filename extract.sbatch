@@ -1,0 +1,13 @@
+#!/bin/bash
+#SBATCH --job-name=pastis-extract
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=32G
+#SBATCH --time=04:00:00
+set -eu
+
+work=${AGRIBENCH_WORK:-/lustre/nobackup/WUR/AIN/$USER/agribench-probe}
+bench=${BENCHMARK_PYTHON:-$work/venv/bin/python}
+cd "$SLURM_SUBMIT_DIR"
+exec "$bench" -u -m tools.extract_representation "$@" --device cuda:0
