@@ -87,6 +87,13 @@ def efficiency(sweep):
     print("Suggested: time limit ~1.5x elapsed_p95, memory ~1.3x rss_max, fewer CPUs where cpu_eff is low.")
 
 
+def write_index(results_root):
+    """results/index.json: the tables the dashboard loads."""
+    files = sorted(p.relative_to(results_root).as_posix() for p in results_root.glob("*/*.csv"))
+    index = {"updated": time.strftime("%Y-%m-%d %H:%M %Z"), "files": [{"path": f} for f in files]}
+    (results_root / "index.json").write_text(json.dumps(index, indent=2) + "\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sweep", required=True)
@@ -115,6 +122,7 @@ def main():
         df.to_csv(path, index=False)
         (root / "summary.csv").write_text(df.to_csv(index=False))
         print(f"{len(df)} complete runs -> {path} ({time.strftime('%Y-%m-%d %H:%M')})")
+        write_index(args.out.parent)
     if args.efficiency:
         efficiency(args.sweep)
 
