@@ -1,0 +1,14 @@
+name: lightgbm
+impute: false  # handles missing values natively
+estimator:
+  _target_: lightgbm.LGBMRegressor
+  n_estimators: 300
+  learning_rate: 0.1
+  num_leaves: 63
+  n_jobs: ${oc.decode:${oc.env:SLURM_CPUS_PER_TASK,2}}
+  random_state: ${experiment.seed}
+  verbose: -1
+search:
+  param_grid:
+    num_leaves: [31, 127]
+    learning_rate: [0.05, 0.1]
