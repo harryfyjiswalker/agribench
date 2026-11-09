@@ -1,0 +1,10 @@
+subset,scheme,input,model,field_r2,field_r2_lo,field_r2_hi,field_rmse,field_rmse_lo,field_rmse_hi
+ARG-C,cv10,biophys,tabicl,0.7156,0.5913,0.8053,1.4967,1.2376,1.8085
+ARG-C,cv10,galileo+mind,tabicl,0.7826,0.7191,0.8372,1.3085,1.1504,1.4721
+ARG-C,cv10,s2,tabicl,0.7174,0.6208,0.7911,1.4917,1.2781,1.7417
+ARG-C,cv10,s2+satclip,tabicl,0.7374,0.6306,0.8181,1.4381,1.2132,1.6554
+ARG-C,cv10,s2-gdd,tabicl,0.7457,0.66,0.8151,1.4152,1.2103,1.6143
+ARG-C,cv10,s2-harmonic,tabicl,0.6768,0.5777,0.7568,1.5954,1.3699,1.8119
+ARG-C,loyo,s2,tabicl,0.2291,0.0391,0.3669,2.4639,2.2398,2.7035
+ARG-C,loyo,s2-gdd,tabicl,0.4029,0.2589,0.5186,2.1685,1.949,2.3619
+ARG-C,loyo,s2-harmonic,tabicl,0.2075,0.0073,0.3489,2.4982,2.2752,2.7105

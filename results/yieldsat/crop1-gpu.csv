@@ -1,0 +1,2 @@
+dataset,subset,scheme,input,model,folds,n_features,pixel_cap,pixel_r2_mean,pixel_r2_std,pixel_rmse_mean,pixel_rmse_std,field_r2_mean,field_r2_std,field_rmse_mean,field_rmse_std,pooled_pixel_r2,pooled_pixel_rmse,pooled_field_r2,pooled_field_rmse,task_hours,git_commit,sweep
+yieldsat,ARG-C,cv10,weather-pheno,tabicl,10,69,32,0.3298,0.1501,2.9356,0.1862,0.5712,0.1115,1.7537,0.3815,0.3743,2.944,0.5882,1.8009,0.034,e6081911ac,crop1-gpu

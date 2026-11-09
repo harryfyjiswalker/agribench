@@ -1,0 +1,4 @@
+subset,scheme,input,model,groups,candidates,mean_rank,rank_var,mean_group_r2,worst_group_r2
+ARG-C,loyo,s2-gdd,tabicl,8,3,1.5,0.25,0.1425,-1.0556
+ARG-C,loyo,s2-harmonic,tabicl,8,3,2.125,0.6094,-0.0023,-0.7241
+ARG-C,loyo,s2,tabicl,8,3,2.375,0.7344,-0.4594,-2.0748
