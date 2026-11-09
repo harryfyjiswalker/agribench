@@ -1,0 +1,3 @@
+[submodule ".claude/skills/anunna"]
+	path = .claude/skills/anunna
+	url = https://git.wur.nl/anunna/anunna-skill.git
