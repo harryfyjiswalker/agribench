@@ -1,0 +1,7 @@
+# Linear probe: closed-form ridge on z-scored features, penalty chosen on the inner folds (tools/probe.py).
+# The regression probe of torchgeo/geo-eval-harness (CoordBench), with AgriBench's nested tuning. CPU, cheap.
+name: probe
+impute: true
+internal_cv: true      # RidgeProbe evaluates the whole penalty grid itself, from one eigendecomposition per fold
+estimator:
+  _target_: tools.probe.RidgeProbe

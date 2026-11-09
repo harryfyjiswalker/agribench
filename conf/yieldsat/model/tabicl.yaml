@@ -1,0 +1,15 @@
+# TabICL v2 regressor (soda-inria/tabicl 2.2.0). Needs a GPU:
+#   sbatch --partition=gpu --gres=gpu:1 --mem=64G yieldsat.sbatch ... model=tabicl
+# Pre-trained on up to ~48k rows and ~100 columns, so: no tuning, one fit per fold on a field-stratified sample
+# (pixel_cap per field), and inputs wider than max_features are reduced by PCA (fitted on training pixels only).
+name: tabicl
+impute: false
+pixel_cap: 32
+max_features: 100
+predict_batch: 50000
+estimator:
+  _target_: tabicl.TabICLRegressor
+  model_path: ${oc.env:AGRIBENCH_TABICL_CKPT,/lustre/shared/agriscience-benchmark/checkpoints/tabicl/tabicl-regressor-v2-20260212.ckpt}
+  allow_auto_download: false
+  device: cuda
+  random_state: ${experiment.seed}

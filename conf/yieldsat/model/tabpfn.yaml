@@ -1,10 +1,15 @@
-# Needs a GPU: sbatch --partition=gpu --gres=gpu:1 --mem=64G yieldsat.sbatch ... model=tabpfn
-# Not usable yet (2026-11-09): only a TabPFN *classifier* checkpoint is on Anunna. Put a regressor checkpoint at
-# the path below (or set AGRIBENCH_TABPFN_REG_CKPT) before running.
+# TabPFN-3.5 (fast). One checkpoint serves classification and regression from 3.5 on. Needs a GPU:
+#   sbatch --partition=gpu --gres=gpu:1 --mem=64G yieldsat.sbatch ... model=tabpfn
+# In-context learner, no tuning: one fit per fold on a field-stratified sample (pixel_cap per field). Inputs wider
+# than max_features are reduced by PCA (fitted on the training pixels only).
 name: tabpfn
-impute: false
+impute: false          # handles missing values natively (imputation is added automatically before PCA)
+pixel_cap: 32
+max_features: 500
+predict_batch: 50000
 estimator:
   _target_: tabpfn.TabPFNRegressor
-  model_path: ${oc.env:AGRIBENCH_TABPFN_REG_CKPT,/lustre/shared/agriscience-benchmark/checkpoints/tabpfn/tabpfn-regressor.ckpt}
+  model_path: ${oc.env:AGRIBENCH_TABPFN_CKPT,/lustre/shared/agriscience-benchmark/checkpoints/tabpfn/tabpfn-v3.5-fast-20260909.safetensors}
   device: cuda
+  ignore_pretraining_limits: true
   random_state: ${experiment.seed}

@@ -7,7 +7,7 @@ defaults:
 subset: null        # ARG-C ARG-S ARG-W BRA-C BRA-S BRA-W GER-R GER-W URG-S  (cv10, loyo, loro)
 crop: null          # corn soybean wheat                                    (loco)
 scheme: cv10        # cv10 | loyo | loro | loco
-input: s2           # s2 (12 S2 bands x 24 steps) | s2-adm (all 120 bands)
+input: s2           # s2 | s2-adm | latlon | mind | satclip | galileo, or joined with + (e.g. galileo+mind)
 paths:
   project: ${oc.env:AGRIBENCH_PROJECT,/lustre/shared/agriscience-benchmark}
   features: ${oc.env:AGRIBENCH_YIELDSAT_FEATURES,${paths.project}/features/yieldsat/v1}
@@ -19,6 +19,7 @@ experiment:
   smoke: false          # plumbing check: 2 folds, 16 px/field, 200 test px/field, shrunken grid
   confirm_test: false   # required for scheme=loco (the final evaluation, 2.3b)
   predict_batch: 200000
+  fold: null            # run one outer fold only (parallel sweeps); null = all folds
 hydra:
   job:
     chdir: false
