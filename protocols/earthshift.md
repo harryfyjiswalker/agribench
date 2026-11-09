@@ -1,7 +1,8 @@
 # EarthShift field-delineation evaluation protocol
 
-Status: **agreed 2026-11-09 (section 5). Data downloaded and verified, split files frozen and input cache built
-on Anunna (2026-11-09); the training and evaluation code is not written yet.** This page sets
+Status: **agreed 2026-11-09 (section 6). Data downloaded and verified, split files frozen and input cache built
+on Anunna (2026-11-09). First results in for ResNet-50 (ImageNet and random) and Galileo Base, frozen and
+fully fine-tuned, 5 seeds each (section 4b, 2026-11-09).** This page sets
 how AgriBench scores a model on EarthShift's field-delineation tasks, so results are comparable with the
 paper and with each other. Sections marked **[paper]** follow Doerksen and Kerner (2026) or their released
 code exactly. Sections marked **[AgriBench]** fill gaps the paper leaves open or go beyond it.
@@ -78,8 +79,9 @@ south_africa 0.61 / 3,737.
   Cambodia and Denmark test chips, and the used South Africa chips. That's about 2,600 images, roughly
   1.5 GB in 4 files. Denmark's 2.9 GB zip shrinks to about 0.4 GB, because only its 332 test chips are
   needed.
-- **Encoder features are cached once** per encoder × country in `$project/features/earthshift/`, as for
-  PASTIS-R. The frozen-backbone runs and their learning-rate sweeps read only those.
+- **Encoder features are not cached.** The input adapter trains in the frozen setting too (decision 6.6), so
+  the backbone's input changes every step and its features can't be computed once. The runs are small
+  enough that this costs little (section 4).
 - **Unpacking the zips into folders on Lustre gains nothing:** 26,505 small files, slower to list and
   read, and no faster than the packed cache. If a tool really needs a folder tree (e.g. to rerun the
   EarthShift code unchanged), unpack to `$TMPDIR` on the compute node inside that job.
@@ -298,7 +300,7 @@ The paper also runs A→B on all FTW countries pooled (paper p.4, Table 1: 49,33
 The code ignores FTW's official split here. It re-splits chips 70 / 10 / 20 per country with a seed
 (`data_manager.py:314-400`), so neighbouring chips end up in train and test. The paper gives only effective
 robustness for it (Table 5, row "Season-to-Season"), not mIoU. It needs the 56.8 GB, 352,803-file download.
-**Left out** (decision 5.1).
+**Left out** (decision 6.1).
 
 ### 2.4 Metric [paper]
 
@@ -341,7 +343,7 @@ predict one value per row, so most of them don't carry over directly:
 
 | AgriBench piece | Fits? | How |
 |---|---|---|
-| **Frozen encoder + light decoder** (Galileo, Presto, any GFM) | **Yes, main route** | Extract dense patch features once per chip and window, store them, and train the paper's conv-ReLU-conv head on them. This is exactly the paper's frozen-backbone setting, cheap enough to sweep, and needs no backbone gradients. |
+| **Frozen encoder + light decoder** (Galileo, Presto, any GFM) | **Yes, main route** | The paper's frozen-backbone setting: dense patch features from the frozen encoder, and the paper's conv-ReLU-conv head (plus the input adapter, where the model needs one) trained on them. |
 | **Full fine-tuning** | Yes, more expensive | Needs a GPU training loop over images. Only for encoders that are worth it. |
 | **Per-pixel tabular heads** (logistic regression, RF, LightGBM, TabPFN) | Only as a baseline | Classify each pixel from its 4 bands, possibly with its dense encoder feature. There is no spatial context, so boundaries will be poor. Train on a capped random sample of pixels per chip. Useful as a floor. |
 | **Presto** | Weak fit | It is a per-pixel time-series model. Here each sample is one date with 4 bands, so Presto sees one time step without SWIR or red-edge. |
@@ -363,7 +365,8 @@ not part of the core benchmark.
 
 - **Input adapter.** The paper calls the 1×1 input adapter "learnable" (paper p.6). In frozen mode the code
   unfreezes only the decoder (`training.py:408-410`), so the adapter stays at its random initialisation.
-  AgriBench trains the adapter together with the head.
+  AgriBench trains the adapter together with the head, for models that need one (Galileo takes R, G, B and NIR
+  in its own band slots and needs none; section 4).
 - **Galileo.** The paper evaluates Galileo as a backbone, but its segmentation wrapper runs only the
   patch-embedding layer, not the transformer (`models/galileo_model.py:73-103`). AgriBench uses the full
   encoder.
@@ -440,7 +443,113 @@ frozen / 3e-3 full.
 
 ---
 
-## 4. Out of scope
+## 4. Running it [AgriBench]
+
+Code: `tools/earthshift_train.py` (training and scoring), `earthshift.sbatch` (one GPU job),
+`tools/earthshift_results.py` (chosen learning rates and the result tables). Submit from the repo root:
+
+    # 1. Learning-rate sweeps, ID validation only (2.3). Location shift uses de-geo, temporal uses za-season.
+    sbatch earthshift.sbatch --model resnet50-imagenet --setting frozen --task de-geo --mode sweep
+    # 2. The chosen rate per model x setting x shift:
+    $project/envs/benchmark-v2/bin/python -m tools.earthshift_results --best-lr
+    # 3. Final runs on the test sets, 5 seeds, logged in $project/runs/earthshift/test-ledger.jsonl (2.7):
+    sbatch earthshift.sbatch --model resnet50-imagenet --setting frozen --task de-geo --mode final \
+        --lr <chosen> --confirm-test
+    # 4. Tables:
+    $project/envs/benchmark-v2/bin/python -m tools.earthshift_results
+
+**Training tasks.** `de-geo` trains once on the Germany location split and scores the Germany ID test,
+Cambodia and Denmark. `de-year` and `za-season` are the two temporal tasks. Each (lr, seed) appends one line to
+`$project/runs/earthshift/$USER/<time>-<job>/results.jsonl`, with the split, code and git hashes.
+
+**Models so far.**
+
+- `resnet50-imagenet`, `resnet50-random`: torchvision ResNet-50, stride-32 features, learnable 1×1 adapter
+  from 4 to 3 bands, FTW normalisation. The paper's most robust model and its random-weight floor.
+- `galileo-base`: the full Galileo Base encoder at 224 px with patch size 8 (28 × 28 feature map). R, G, B
+  and NIR go straight into Galileo's own S2 bands (B4, B3, B2, B8), and NDVI is computed from R and NIR. It
+  uses Galileo's own normalisation; its other band groups are masked; the month is the middle month of the
+  window. With native band slots there is nothing for an adapter to do, so this model has none. Galileo's
+  features are the per-patch mean over its unmasked token groups (upstream
+  `apply_mask_and_average_tokens_per_patch`).
+
+**Implementation choices** [AgriBench]:
+
+- **bf16 autocast** on the GPU. The paper trained in fp32.
+- **Gradient accumulation** (`--micro-batch`) where a batch of 32 doesn't fit in GPU memory. The effective
+  batch stays 32. Galileo uses micro-batches of 16; this is exact for its LayerNorms.
+- **Whole model in train mode during training**, as the paper's code does. In the frozen setting this means
+  ResNet BatchNorm statistics still update, and Galileo's drop-path stays on.
+- **Images are resized once** to the model's input size, with bilinear antialiasing as in torchvision
+  `Resize`; masks with nearest neighbour.
+
+**Cost per run** on an A100 (Germany location split, 528 samples): ResNet-50 about 50 s, Galileo frozen
+about 5 min, Galileo full fine-tuning about 14 min. A full sweep (9 rates × 5 seeds × 2 shifts × 2
+settings) is about 1 GPU-hour for each ResNet and about 25 GPU-hours for Galileo.
+
+## 4b. Results [AgriBench]
+
+Final runs finished 2026-11-09. mIoU (%) at each model's resized input size (2.4), mean ± std over 5 seeds, on
+the leak-free splits (2.1b). ρ = OOD − β(ID), using the paper's fitted lines (2.4); ρ > 0 means more robust than
+the paper's model population. Learning rates were picked on ID validation only (2.3). Public aggregate table:
+`results/earthshift/final.csv`, written by `python -m tools.earthshift_results --csv`.
+
+**Chosen learning rates** (frozen / full):
+
+| Model | Location | Temporal |
+|---|---|---|
+| Galileo Base | 1e-3 / 6e-5 | 5e-3 / 3e-4 |
+| ResNet-50 ImageNet | 5e-3 / 3e-3 | 1e-4 / 6e-3 |
+| ResNet-50 random | 3e-4 / 3e-4 | 5e-4 / 1e-3 |
+
+Two sit on the edge of the paper's fixed grid: ResNet-50 ImageNet temporal, 1e-4 frozen (lowest) and 6e-3 full
+(highest). The grid is the paper's, so it stays as it is.
+
+**Location shift** (one Germany model, scored on the Germany ID test, Cambodia and Denmark):
+
+| Model | Setting | Germany ID | Cambodia | Δ | ρ | Denmark | Δ | ρ |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Galileo Base | frozen | 55.01 ± 0.06 | 21.16 ± 0.73 | 33.85 | −8.25 | 41.47 ± 0.14 | 13.54 | +12.06 |
+| Galileo Base | full | 55.34 ± 0.06 | 23.14 ± 1.92 | 32.20 | −4.28 | 41.23 ± 0.51 | 14.11 | +13.81 |
+| ResNet-50 ImageNet | frozen | 48.28 ± 0.26 | 18.78 ± 2.44 | 29.50 | −5.24 | 33.49 ± 1.10 | 14.79 | +9.47 |
+| ResNet-50 ImageNet | full | 53.05 ± 0.10 | 13.44 ± 2.28 | 39.62 | −12.33 | 39.13 ± 1.24 | 13.93 | +13.36 |
+| ResNet-50 random | frozen | 44.95 ± 1.19 | 20.55 ± 1.21 | 24.40 | −0.81 | 29.52 ± 1.05 | 15.43 | +8.16 |
+| ResNet-50 random | full | 52.63 ± 0.15 | 16.41 ± 1.75 | 36.21 | −9.04 | 36.76 ± 0.44 | 15.86 | +11.31 |
+
+**Temporal shift:**
+
+| Model | Setting | DE 2018 ID | DE 2019 OOD | Δ | ρ | ZA window A ID | ZA window B OOD | Δ | ρ |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Galileo Base | frozen | 53.68 ± 0.09 | 54.82 ± 0.07 | −1.14 | +2.27 | 49.90 ± 0.08 | 46.48 ± 0.73 | 3.42 | −2.22 |
+| Galileo Base | full | 53.56 ± 0.42 | 54.92 ± 0.09 | −1.36 | +3.49 | 51.57 ± 0.18 | 50.08 ± 0.18 | 1.50 | +0.39 |
+| ResNet-50 ImageNet | frozen | 44.20 ± 0.86 | 46.99 ± 0.39 | −2.79 | +4.10 | 39.33 ± 0.98 | 37.01 ± 2.88 | 2.32 | −0.91 |
+| ResNet-50 ImageNet | full | 50.69 ± 0.42 | 52.31 ± 0.28 | −1.62 | +3.40 | 46.20 ± 0.40 | 45.50 ± 0.93 | 0.69 | +0.55 |
+| ResNet-50 random | frozen | 38.65 ± 1.78 | 42.48 ± 1.41 | −3.82 | +5.25 | 38.87 ± 0.94 | 36.97 ± 1.30 | 1.90 | −0.47 |
+| ResNet-50 random | full | 50.72 ± 0.21 | 52.13 ± 0.16 | −1.41 | +3.20 | 45.72 ± 0.18 | 44.60 ± 0.27 | 1.12 | +0.06 |
+
+Standard deviations of Δ and ρ are in the CSV. Native-resolution (256 × 256) mIoU is within 0.03 points of
+these everywhere, so it changes nothing.
+
+What these show:
+
+- **Galileo Base is best in distribution and on Denmark**, frozen or fully fine-tuned. Frozen Galileo is within
+  0.3 points of fully fine-tuned Galileo on every ID test.
+- **Cambodia remains the hard case, as in the paper.** Every model loses 24–40 points. Frozen random ResNet-50
+  (20.6) is level with frozen Galileo (21.2) and ahead of every fine-tuned ResNet. Full fine-tuning raises the
+  Germany score but lowers the Cambodia score for both ResNets, the paper's "fine-tuning hurts far OOD"
+  pattern; Galileo is the exception (21.2 → 23.1).
+- **The temporal tasks barely move**, as in the paper: Germany 2019 again scores *above* 2018 for every model,
+  and South Africa loses 1–3 points.
+- **Against the paper (section 3, not like-for-like):** the OOD sets are the same, and our OOD scores are
+  similar or a little higher (Galileo frozen: Cambodia 21.2 vs 17.7, Denmark 41.5 vs 33.8). Our ID scores are
+  also a few points higher despite the leak-free splits; the ID test sets differ, so the gap is not meaningful.
+- **The boundary class is never predicted.** Boundary IoU is 0.00–0.6 for every model, seed and test set, so
+  mIoU here is effectively (background IoU + field IoU) / 3, at most about 67. This follows from the paper's
+  recipe (unweighted cross-entropy, no augmentation, stride-8 (Galileo) or stride-32 (ResNet) features for 1–2 px boundaries), and
+  the paper's numbers are in the same range, so it is kept for comparability. A class-weighted loss would be a
+  separate AgriBench variant (not run).
+
+## 5. Out of scope
 
 - **Sensor, spatial-scale and data-source shifts** (paper pp.5–6): different tasks, not field delineation.
 - **The FTW-All season task** for now (2.3c).
@@ -448,15 +557,15 @@ frozen / 3e-3 full.
 - **FTW's own benchmark protocol** (2-window stacked input, object-level metrics, all-country training). It
   could be a separate AgriBench entry later.
 
-## 5. Decisions
+## 6. Decisions
 
 All agreed on 2026-11-09. The rule is to follow the paper's conditions unless there's a good reason not to.
 
 1. **Scope = the paper's four tasks** (DE→KH, DE→DK, ZA A→B, DE 2018→2019). FTW-All is left out: it has no
    mIoU in the paper and a random chip split that leaks.
 2. **Data handling:** the raw zips stay on Lustre unchanged. A packed per-country input cache (about 1.5 GB,
-   4 files) is built once from them, and encoder features are cached once per encoder (section 0). Nothing
-   is unpacked per run.
+   4 files) is built once from them (section 0). Nothing is unpacked per run. Encoder features aren't cached,
+   because the trained input adapter changes the backbone's input every step.
 3. **No leaky splits.** AgriBench uses the leak-free splits in 2.1b for all four tasks. The paper's numbers
    stay as rough sanity checks only.
 4. **Headline metric = the paper's** (3-class mIoU at the resized input size, ID / OOD / Δ / ρ with the

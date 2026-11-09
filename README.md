@@ -29,7 +29,7 @@ environments, so results from different people can be compared directly.
 | Task | Dataset | What it tests | Main score | Status (2026-11-09) |
 |---|---|---|---|---|
 | Yield prediction | [YieldSAT](https://yieldsat.github.io/) | predicting 10 m yield maps in four countries, including in unseen years and regions | R² and RMSE (t/ha), per field and per pixel | **Running.** Runner, sweeps and 8 inputs ready; first sweep under way |
-| Field delineation | [EarthShift](https://earthshift.github.io/) | finding field boundaries in a new country or a new season | mIoU, in and out of distribution | **Training.** Code on branch `earthshift/training`; learning-rate sweeps running |
+| Field delineation | [EarthShift](https://earthshift.github.io/) | finding field boundaries in a new country or a new season | mIoU, in and out of distribution | **First results.** ResNet-50 and Galileo Base, frozen and full, 5 seeds |
 | Crop classification | [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) | classifying crops on tropical islands, including an island never seen in training | mIoU over 8 classes | **Protocol agreed.** Data downloading; runner not written yet |
 | Phenology | – | – | – | Not started |
 
@@ -176,8 +176,7 @@ light segmentation head is trained, 40 epochs) and **full** fine-tuning (50 epoc
 - `resnet50-random`: the same network with random weights, as a floor;
 - `galileo-base`: the full Galileo-Base encoder.
 
-**Running it.** The code is on the branch `earthshift/training` and will be merged with the first results.
-From that branch:
+**Running it.** From the repo root:
 
     # 1. Learning-rate sweep, scored on ID validation only
     sbatch earthshift.sbatch --model resnet50-imagenet --setting frozen --task de-geo --mode sweep
@@ -197,8 +196,21 @@ for fully fine-tuned Galileo on an A100.
 don't carry over. Location encoders don't help either: the location barely changes within a chip. Foundation
 models are compared as backbones instead (protocol section 2.5).
 
-**Status.** ResNet-50 learning-rate sweeps are finishing; the Galileo sweeps are queued at low priority behind
-the YieldSAT GPU work. Final test runs come next.
+**Status.** First results are in (protocol section 4b; `results/earthshift/final.csv`, on the dashboard), mIoU
+at the model's input size, 5 seeds:
+
+| Model | Setting | Germany ID | → Cambodia | → Denmark | DE 2018 → 2019 | ZA A → B |
+|---|---|---:|---:|---:|---:|---:|
+| Galileo Base | frozen | 55.0 | 21.2 | 41.5 | 53.7 → 54.8 | 49.9 → 46.5 |
+| Galileo Base | full | 55.3 | 23.1 | 41.2 | 53.6 → 54.9 | 51.6 → 50.1 |
+| ResNet-50 ImageNet | frozen | 48.3 | 18.8 | 33.5 | 44.2 → 47.0 | 39.3 → 37.0 |
+| ResNet-50 ImageNet | full | 53.1 | 13.4 | 39.1 | 50.7 → 52.3 | 46.2 → 45.5 |
+| ResNet-50 random | frozen | 45.0 | 20.6 | 29.5 | 38.7 → 42.5 | 38.9 → 37.0 |
+| ResNet-50 random | full | 52.6 | 16.4 | 36.8 | 50.7 → 52.1 | 45.7 → 44.6 |
+
+Cambodia is the hard shift: every model loses 24–40 points, and a frozen random ResNet-50 does about as well as
+frozen Galileo. The temporal shifts barely matter. The boundary class is never predicted under the paper's recipe,
+so mIoU tops out near 67 (protocol 4b).
 
 ## PLANTEUR: crop classification
 
@@ -237,8 +249,8 @@ whether to keep the full download (258 GB, which includes the monthly mosaics an
 
 All results go to [the dashboard](https://harryfyjiswalker.github.io/agribench/), one view per dataset. It shows
 each input × head combination, a table per subset, and lets you switch scheme and metric. It reads the aggregate
-tables in `results/<dataset>/`, which the sweep tools write: commit and push a table to publish it. YieldSAT is
-there now; EarthShift and PLANTEUR join when their first results are in.
+tables in `results/<dataset>/`, which the sweep tools write: commit and push a table to publish it. YieldSAT and
+EarthShift are there now; PLANTEUR joins when its first results are in.
 
 **The repo is public.** Commit aggregate scores only: never field names, locations, fold lists or predictions.
 The datasets have their own licences.
