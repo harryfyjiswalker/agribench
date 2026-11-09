@@ -95,13 +95,10 @@ The paper's "S2" input is the 12 S2 bands. Its "S2 + ADM" input is all bands. Th
 4. **Values of 65,535** appear in the S2 band maxima of Argentina, Brazil and Uruguay. They are saturated or
    nodata values and are treated as missing.
 5. **The 24 time steps are not calendar-aligned.** Each field's observations sit in a block of the 24 slots,
-   padded with NaN on both sides. In the rows checked, `times` counts days from the field's first slot, so the
-   file-level `units` attribute ("days since <date>") looks misleading. This will be confirmed when the input
-   builder is written.
-6. **Admin unit names are spelled inconsistently** (e.g. `Santa Fe` and `Santa_Fe`). Don't group by them
-   without cleaning.
-7. **The raw weather CSV has 10 variables, but the preprocessed file keeps 4.** Wind, humidity, radiation and
-   dew point are only in `Raw/`.
+   padded with NaN on both sides. `times` holds each slot's date as days since one reference date per country
+   file, exactly as the CF `units` attribute says (e.g. "days since 2019-09-22" for Germany), so offsets can be
+   negative. (An earlier version of this note called the attribute misleading; that was wrong. Checked on
+   2026-11-09: reference + offset falls on the Raw S2 acquisition dates.)
 
 ---
 
@@ -251,7 +248,7 @@ SHA-256 and the runner refuses a mismatch):
   Neither takes a date, so a location gets the same embedding in every year.
 - `galileo/` (`tools/embed_yieldsat_galileo.py`): Galileo-Base on each pixel's 24-slot S2 series as a 1 × 1
   time series (the 10 S2 bands Galileo knows, plus NDVI), with each slot's month token taken from
-  seeding date + slot offset (checked against the Raw S2 acquisition dates on 25 fields per subset). Weather,
+  the file's time reference + slot offset (checked against the Raw S2 acquisition dates on 25 fields per subset). Weather,
   topography and location are left out on purpose, so `galileo` is comparable to `s2` and location only enters
   through the location encoders. Mean of the encoder's tokens (Galileo `average_tokens`), 768-d.
 - `aef/` (`tools/extract_yieldsat_aef.py`): the 64-d AlphaEarth annual embedding of the calendar year of the
