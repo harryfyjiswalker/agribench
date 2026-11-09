@@ -10,7 +10,7 @@ scheme: cv10        # cv10 | loyo | loro | loco
 input: s2           # s2 | s2-adm | latlon | mind | satclip | galileo, or joined with + (e.g. galileo+mind)
 paths:
   project: ${oc.env:AGRIBENCH_PROJECT,/lustre/shared/agriscience-benchmark}
-  features: ${oc.env:AGRIBENCH_YIELDSAT_FEATURES,${paths.project}/features/yieldsat/v1}
+  features: ${oc.env:AGRIBENCH_YIELDSAT_FEATURES,${paths.project}/features/yieldsat}   # v1/ cache + representation folders
   splits: ${paths.project}/splits/yieldsat
   runs: ${oc.env:AGRIBENCH_RUNS,${paths.project}/runs/yieldsat}
 experiment:
