@@ -41,7 +41,15 @@ for c in $countries; do
   if [[ -z ${expected_files[$c]:-} ]]; then echo "unknown country: $c" >&2; status=1; continue; fi
   if [[ ! -s $c.zip ]]; then
     echo "$(date +%T) downloading $c.zip"
-    curl -fL --retry 10 --retry-delay 30 --retry-all-errors -C - -o "$c.zip.part" "$base/$c.zip"
+    # A connection can stall at a few KB/s while a fresh one runs at MB/s, so give up on any transfer
+    # slower than 100 KB/s for 60 s and resume the .part file on a new connection (up to 30 tries).
+    for try in $(seq 30); do
+      curl -fsSL --speed-limit 100000 --speed-time 60 -C - -o "$c.zip.part" "$base/$c.zip" && break
+      echo "$(date +%T) $c: attempt $try stopped at $(stat -c %s "$c.zip.part" 2>/dev/null || echo 0) bytes, resuming"
+      sleep 10
+    done
+    want_size=$(curl -fsSIL "$base/$c.zip" | awk 'tolower($1) == "content-length:" {n = $2} END {print n + 0}')
+    [[ $(stat -c %s "$c.zip.part") == "$want_size" ]] || { echo "FAIL $c: incomplete download" >&2; status=1; continue; }
     mv "$c.zip.part" "$c.zip"
   fi
   want_md5=$(awk -F, -v c="$c" '$1 == c {print $2}' checksum.md5)
