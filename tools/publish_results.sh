@@ -71,7 +71,7 @@ pathlib.Path("results/index.json").write_text(json.dumps({"updated": now, "files
 PY
 git add results
 if git diff --cached --quiet -- results/*/*.csv results/yieldsat/diagnostics; then
-  echo "No new results since the last publish."; git checkout -q main; git branch -q -D "$branch"; exit 0
+  echo "No new results since the last publish."; git reset -q --hard; git checkout -q main; git branch -q -D "$branch"; exit 0
 fi
 git commit -q -m "Results: automatic publish $stamp (aggregates only, finished runs so far)
 
