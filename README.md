@@ -88,6 +88,9 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 | `biophys` | canopy variables per date (leaf area index, FAPAR, ground cover, canopy chlorophyll and water) from ESA SNAP's biophysical processor, on the `s2-aligned` grid | ~85 |
 | `arc` | ARC retrieval per pixel (crop-model parameters, peak LAI and the LAI curve since sowing), after Whittaker outlier removal; internal testing | ~40 |
 | `arcvae` | ARC crop-model parameters per pixel (canopy scaling and phenology timing, mean and uncertainty) from the ARC-VAE encoder; internal testing | 22 |
+| `weather-pheno` | the field's season weather in agronomic terms, keyed to sowing and to crop stages from accumulated heat: growing degree days, heat stress around flowering, frost, rainfall and a simple soil water balance in the vegetative, flowering and grain-fill windows. One value per field | 69 |
+| `wofost` | the WOFOST crop model run for each field (PCSE): simulated potential and water-limited yield and biomass, peak LAI, flowering and maturity dates, water stress. One value per field | 13 |
+| `wofost-da` | WOFOST corrected during the season by the field's ARC leaf area index (ensemble Kalman filter); `wofost-da-snap` uses the SNAP LAI instead. One value per field | 12 |
 | `latlon` | the pixel's latitude and longitude: the simple control for the location encoders | 2 |
 | `mind` | [MIND](https://arxiv.org/abs/2609.25454) location encoder. Sees only the location. | 3072 |
 | `satclip` | [SatCLIP](https://arxiv.org/abs/2311.17179) location encoder. Sees only the location. | 256 |
