@@ -213,7 +213,12 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 |---|---|---|
 | `yieldsat/s2` | 12 S2 bands × 24 steps | the paper's "Sentinel-2" rows |
 | `yieldsat/s2-adm` | all 120 bands × 24 steps | the paper's "S2 + ADM, input fusion" rows |
-| embeddings, location encoders, crop-model outputs | from extracted feature tables, keyed by pixel `index` | AgriBench additions |
+| `latlon` | pixel latitude, longitude (WGS84) | AgriBench: plain-coordinate control for the location encoders |
+| `mind` | MIND location encoder, 3072-d (Corley et al. 2026) | AgriBench |
+| `satclip` | SatCLIP ViT16-L40 location encoder, 256-d (Klemmer et al.) | AgriBench |
+| `galileo` | Galileo-Base, 768-d, from the pixel's S2 series | AgriBench |
+| `aef` | AlphaEarth Foundations annual embedding, 64-d | AgriBench |
+| combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
 times. Missing values stay NaN: heads that can't handle NaN get training-fold median imputation inside the
@@ -230,7 +235,43 @@ Columns are the 16 time-varying bands at each of the 24 steps (`<band>_t<step>`)
 S2 values of 65,535 become NaN. Caches are never overwritten. On Germany, every one of 12,000 spot-checked
 values matched the source file.
 
+**Representation caches** (2026-11-09). Every representation lives in its own folder under
+`features/yieldsat/`, with rows aligned to `v1/<subset>-meta.npz` (each `<subset>.json` stores that file's
+SHA-256 and the runner refuses a mismatch):
+
+- `latlon/` (`tools/build_yieldsat_latlon.py`): the preprocessed file has no usable coordinates (`coord_x/y/z`
+  are a transformed version), so each pixel centre (row + 0.5, col + 0.5) is mapped through its field's Raw S2
+  GeoTIFF transform and reprojected to WGS84. Check: every field's mean pixel position lies within 1 km of the
+  metadata centroid (worst case 0.95 km, in ARG-W, where yield maps cover only part of some fields; Brazil and
+  Germany are within 90 m).
+- `mind/`, `satclip/` (`tools/embed_yieldsat_location.py`): location encoders only see coordinates, so pixels
+  are snapped to a 0.001° grid (about 110 × 70 m), each of the 73k occupied cells is embedded once, and pixels
+  index into that table. MIND uses its full 3072-d trunk features (upstream eb25937, weights
+  `taylor-geospatial/MIND@1437c4d`); SatCLIP uses the location encoder of `microsoft/SatCLIP-ViT16-L40`.
+  Neither takes a date, so a location gets the same embedding in every year.
+- `galileo/` (`tools/embed_yieldsat_galileo.py`): Galileo-Base on each pixel's 24-slot S2 series as a 1 × 1
+  time series (the 10 S2 bands Galileo knows, plus NDVI), with each slot's month token taken from
+  seeding date + slot offset (checked against the Raw S2 acquisition dates on 25 fields per subset). Weather,
+  topography and location are left out on purpose, so `galileo` is comparable to `s2` and location only enters
+  through the location encoders. Mean of the encoder's tokens (Galileo `average_tokens`), 768-d.
+- `aef/` (`tools/extract_yieldsat_aef.py`): the 64-d AlphaEarth annual embedding of the calendar year of the
+  field's harvest date, read with HTTP range requests from the Source Cooperative mirror. AEF starts in 2017,
+  so the 48 German fields harvested in 2016 have no AEF value (imputed by the runner, and counted in the json).
+
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
+
+**Linear probe** (`model=probe`, `tools/probe.py`), the main head for comparing representations. It follows the
+regression probe of the TorchGeo evaluation harness (geo-eval-harness, CoordBench `linear_probe_score`):
+closed-form ridge in float64 on features z-scored with the training fold's statistics, unpenalised intercept,
+penalty chosen by cross-validation, and a warning when the best penalty is on the grid edge. Two AgriBench
+differences: the inner folds are the scheme-mirroring folds below (not a single random split), and the penalty
+is per training pixel (MSE + λ‖w‖², λ in 19 log-spaced values from 1e-6 to 1e3), so the same grid means the same
+shrinkage at any training size. The harness's image-backbone probe is logistic and classification-only, so it
+doesn't apply to yield.
+
+**TabPFN and TabICL** need no tuning: one fit per outer fold, on 32 training pixels per field (TabICL v2 is
+pre-trained on up to ~48k rows), with PCA to 500 (TabPFN) or 100 (TabICL) columns, fitted on training pixels
+only, when an input is wider than that.
 
 The paper doesn't describe tuning. To keep it honest and the same for every head:
 
@@ -274,6 +315,14 @@ pixels within a field are strongly autocorrelated anyway.
   logged in the ledger.
 
 ### 2.9 What a result contains
+
+**Running sweeps.** `python -m tools.sweep_yieldsat --name <sweep> --inputs ... --models ...` submits one Slurm
+array per head and input width: CPU heads run one task per outer fold (the folds of a run execute in
+parallel), GPU heads one task per run (the model loads once). Resources per head are set from measured use,
+the sweep-wide concurrency cap defaults to 200 tasks, finished folds are skipped on re-runs, and a dependent job
+runs `tools.collect_yieldsat`, which combines folds into `metrics.json` and writes the aggregate table
+`results/yieldsat/<sweep>.csv` that the dashboard reads. `--efficiency` reports requested vs used time, CPU and
+memory per array.
 
 For each model × input × subset × scheme:
 
