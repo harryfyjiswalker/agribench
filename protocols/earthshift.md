@@ -1,7 +1,7 @@
 # EarthShift field-delineation evaluation protocol
 
-Status: **draft 2026-11-09. Splits decided (2.1b, leak-free); the other decisions in section 5 are open. Download
-running, nothing trained yet.** This page sets
+Status: **draft 2026-11-09. Splits decided (2.1b, leak-free); the other decisions in section 5 are open. Core
+data downloaded and verified on Anunna (2026-11-09); nothing trained yet.** This page sets
 how AgriBench scores a model on EarthShift's field-delineation tasks, so results are comparable with the
 paper and with each other. Sections marked **[paper]** follow Doerksen and Kerner (2026) or their released
 code exactly. Sections marked **[AgriBench]** fill gaps the paper leaves open or go beyond it.
