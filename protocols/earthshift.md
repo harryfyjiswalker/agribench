@@ -1,6 +1,7 @@
 # EarthShift field-delineation evaluation protocol
 
-Status: **draft 2026-11-09, needs the decisions in section 5. Nothing downloaded or run yet.** This page sets
+Status: **draft 2026-11-09. Splits decided (2.1b, leak-free); the other decisions in section 5 are open. Download
+running, nothing trained yet.** This page sets
 how AgriBench scores a model on EarthShift's field-delineation tasks, so results are comparable with the
 paper and with each other. Sections marked **[paper]** follow Doerksen and Kerner (2026) or their released
 code exactly. Sections marked **[AgriBench]** fill gaps the paper leaves open or go beyond it.
@@ -98,7 +99,7 @@ Each country zip unpacks to (no country folder inside the zip):
 |---|---|
 | `chips_<country>.parquet` | one row per chip: `aoi_id`, `split` (train / val / test, FTW's official split), `geometry` |
 | `data_config_<country>.json` | dates of window A and window B, collection year, grid polygons |
-| `s2_images/window_a/<aoi_id>.tif` | Sentinel-2 L2A, 4 bands (R, G, B, NIR), uint16 reflectance × 10,000, 256 × 256 px, EPSG:4326 (≈ 10 m) |
+| `s2_images/window_a/<aoi_id>.tif` | Sentinel-2 L2A, 4 bands (R, G, B, NIR), uint16 reflectance × 10,000, 256 × 256 px in EPSG:4326. A chip covers about 1.5 km north–south and less east–west (≈ 0.95 km in Germany, ≈ 1.27 km in South Africa) |
 | `s2_images/window_b/<aoi_id>.tif` | the same chip on a second date |
 | `label_masks/semantic_3class/<aoi_id>.tif` | uint8: 0 background, 1 field interior, 2 field boundary |
 | `label_masks/semantic_2class/`, `label_masks/instance/` | other label forms (not used by EarthShift) |
@@ -122,16 +123,24 @@ and a window-A image, so EarthShift silently uses fewer.
 ### Things to know
 
 1. **The Germany "year" shift is also a location shift.** FTW's Germany train and val chips are all in grid
-   g2, and its test chips are all in grid g1, the adjacent area to the north-west (each grid is about 25 × 25 km). `data_config_germany.json`
+   g2, and its test chips are all in grid g1, a separate area to the north-west (each grid is about 25 × 25 km;
+   the nearest g1 and g2 chips are 2.4 km apart). `data_config_germany.json`
    lists the 2019 season first and the 2018 season second, and grids g1 then g2. The paper says the training
    data is 2018 and the test data is 2019 (paper p.4–5). So "2018 → 2019" is also "grid g2 → grid g1".
 2. **The location-shift ID test set is the same Germany test split (g1, 2019).** So the "ID" test is already
    shifted in year and grid from training. The ID numbers in the paper's Table 12 aren't a pure
    in-distribution score.
-3. **The Germany year-to-year ID test set leaks.** It's a random 412 / 200 split of the 612 training samples
-   (`run_pipeline.py:203-210`). A chip's window A and window B are separate samples with the *same* label
-   mask, so one can land in train and the other in the ID test. Neighbouring chips also share fields. The ID
-   score there is optimistic. The paper's Table 1 says 413 / 200; the code gives 412 / 200 (612 in total).
+3. **The paper's splits leak inside Germany grid g2 and inside South Africa** (AgriBench replaces them, 2.1b):
+   - **Germany year task, ID test.** It's a random 412 / 200 split of the 612 training samples
+     (`run_pipeline.py:203-210`). A chip's window A and window B are separate samples with the *same* label
+     mask, so one can land in train and the other in the ID test. Neighbouring chips also share fields. (The
+     paper's Table 1 says 413 / 200; the code gives 412 / 200.)
+   - **Germany validation.** FTW's 30 Germany val chips are single chips scattered among the training chips
+     of grid g2, each one touching training chips on all sides.
+   - **South Africa.** FTW's val and test chips are 3 × 3 blocks inside the same grids as training, with no
+     gap: 180 of the 590 training chips touch a val or test chip, and 9 val chips touch a test chip.
+   - Fields cross chip edges, so a chip next to a test chip shows part of the same fields. Those ID and val
+     scores are optimistic.
 4. **Denmark's OOD test has 664 samples here** (332 chips × 2 windows), but the paper lists 663 (paper p.4,
    Table 1). The difference is probably one unreadable file in the authors' copy. It matters little.
 5. **Window B comes before window A in time** in all four countries (data configs). The paper's "planting
@@ -152,6 +161,10 @@ Four field-delineation tasks, all 3-class semantic segmentation (paper p.4, Tabl
 | **DE→DK** | location | `ftw-germany-denmark` | DE train, A+B (612) | DE val, A+B (60) | DE test, A+B (700) | DK test, A+B (664) |
 | **ZA A→B** | temporal (season) | `ftw-south_africa-window` | ZA train, A (590) | ZA val, A (72) | ZA test, A (85) | ZA test, **B** (85) |
 | **DE 2018→2019** | temporal (year) | `ftw-germany-year` | 412 of DE train, A+B | DE val, A+B (60) | other 200 of DE train, A+B | DE test, A+B (700) |
+
+These are the paper's definitions. **AgriBench uses the leak-free version in 2.1b**, which keeps the same
+countries, windows and OOD test sets but re-draws train, val and ID test inside Germany grid g2 and South
+Africa.
 
 Sources for the sample definitions:
 
@@ -175,6 +188,51 @@ and shape" (paper p.5). Cambodia is the far shift (other continent, small plots)
 - The single-country `-window` season tasks for Germany, Cambodia, Brazil and Kenya are in the config but
   not in the paper.
 - **FTW-All A→B** is in the paper; see 2.3c.
+
+### 2.1b Leak-free splits [AgriBench: replaces the paper's train / val / ID test]
+
+**Rule:** within a task, no two of train, val and ID test may share a chip or touch each other. Both windows
+of a chip always go to the same side, and at least one whole chip (about 1.5 km) separates train, val and ID
+test. "Touching" is measured on the chip footprints in `chips_<country>.parquet` (within 50 m, edges and
+corners included), not on chip ids. Chips in the gap are dropped. OOD test sets are untouched: they are other
+countries, a different grid (Germany g1 is 2.4 km from g2), or the other window of the ID-test chips. That
+last one is the shift being measured, not a leak.
+
+**Germany grid g2 (all three Germany tasks).** The 336 train + val chips of g2 lie in exactly **14 latitude
+bands of 24 chips**, 1.535 km apart (chip centroids). Band 1 is the northernmost. The chip ids'
+`<row>` number is *not* a clean band (some id rows wrap onto two latitudes), so bands come from the
+footprints. g2 is cut into whole bands, ignoring FTW's train/val labels:
+
+| Bands | Chips | Role in DE→KH, DE→DK | Role in DE 2018→2019 |
+|---|---:|---|---|
+| 1–7 | 168 | train | train |
+| 8 | 24 | gap (dropped) | gap (dropped) |
+| 9 | 24 | val | val |
+| 10 | 24 | gap (dropped) | gap (dropped) |
+| 11–14 | 96 | train | ID test |
+
+So, in samples (chips × 2 windows):
+
+| Task | Train | Val | ID test | OOD test |
+|---|---:|---:|---:|---:|
+| DE→KH, DE→DK | 528 (bands 1–7 + 11–14) | 48 | 700 (DE test, grid g1, unchanged) | 50 / 664 (unchanged) |
+| DE 2018→2019 | 336 (bands 1–7) | 48 | 192 (bands 11–14) | 700 (DE test, grid g1, unchanged) |
+
+Checked on the footprints (2026-11-09): train ↔ val and val ↔ ID test are at least 1,538 m apart, and train ↔
+ID test at least 4,607 m. The location tasks share one validation set, so one learning-rate sweep still
+covers both.
+
+**South Africa.** FTW's 3 × 3 val and test blocks are kept. Training chips that touch a val or test chip are
+dropped, and so are val chips that touch a test chip:
+
+| Task | Train | Val | ID test | OOD test |
+|---|---:|---:|---:|---:|
+| ZA A→B | 410 (window A) | 63 (window A) | 85 (window A, unchanged) | 85 (window B, unchanged) |
+
+**Cost:** fewer training chips than the paper: about 30% fewer in South Africa (410 vs 590), 14% fewer in the
+Germany location tasks (264 vs 306) and 18% fewer in the Germany year task (168 vs about 206).
+**Consequence:** the paper's numbers in section 3 are no longer like-for-like for any of the four tasks.
+They stay as rough sanity checks. Models in AgriBench are compared only with each other.
 
 ### 2.2 Training rules [paper]
 
@@ -212,8 +270,8 @@ These come from paper p.6–8 and match the code unless noted.
 - **Final scores:** each model is retrained with the chosen rate on **5 random seeds**, and reported as
   mean ± std over those seeds (paper p.14; Tables 12–13).
 
-AgriBench follows this. For DE→KH and DE→DK, the sweep is the same either way, because both share the
-Germany training and validation data.
+AgriBench follows this, on the leak-free validation sets of 2.1b. DE→KH and DE→DK share the same training
+and validation chips, so one sweep covers both.
 
 ### 2.3c FTW-All season task [paper, optional for AgriBench]
 
@@ -287,11 +345,12 @@ encoder**. Expect AgriBench's Galileo numbers to differ from the paper's.
 - **Frozen split files.** `tools/make_earthshift_splits.py` (still to write) reads the four
   `chips_<country>.parquet` files from inside the zips. It writes one file per task to
   `/lustre/shared/agriscience-benchmark/splits/earthshift/<task>.csv`, with columns
-  `country, aoi_id, window, role` (role = train / val / id_test / ood_test). It keeps only samples whose image
-  and label exist, as the code does, and refuses to overwrite.
-- **The Germany year split is reproduced exactly** (412 / 200, `torch.Generator().manual_seed(42)`, over the
-  sample list in the code's order: all window-A samples, then all window-B). The file is then the reference,
-  so torch versions don't matter later.
+  `country, aoi_id, window, role` (role = train / val / id_test / ood_test / gap). It applies the rules in
+  2.1b, keeps only samples whose image and label exist, as the code does, and refuses to overwrite.
+- **It checks the rule** before writing: no `aoi_id` in two roles, and no train, val or ID-test chip within
+  50 m of a chip of another of those roles (footprints from the parquet, in UTM). It stops if either check
+  fails, and prints the counts in 2.1b.
+- **No randomness:** every split is fixed by chip position, so no seed is needed.
 - **Seeds:** five fixed seeds, `0 1 2 3 4`. The paper draws them at random (`run_pipeline.py:66-70`) and
   doesn't publish them.
 - Each run records the SHA-256 of the split file, the zip and the config, as for PASTIS-R and YieldSAT.
@@ -320,7 +379,9 @@ laid out like the paper's Tables 12–13, frozen and full fine-tuning in separat
 ## 3. Paper reference numbers (sanity checks)
 
 mIoU (%), mean ± std over 5 seeds, at each backbone's resized input size. From paper p.21 (Table 12) and p.22
-(Table 13). ∗ = frozen backbone.
+(Table 13). ∗ = frozen backbone. These use the paper's splits, so they are **not like-for-like** with
+AgriBench's leak-free splits (2.1b), especially the ID columns. The OOD test sets are the same, but models
+train on fewer chips.
 
 | Model | DE→KH ID | DE→KH OOD | DE→DK ID | DE→DK OOD | ZA A→B ID | ZA A→B OOD | DE year ID | DE year OOD |
 |---|---|---|---|---|---|---|---|---|
@@ -360,9 +421,8 @@ frozen / 3e-3 full.
    FTW-All (57 GB, 353k files, no mIoU in the paper) stays out for now. *(recommended)*
 2. **Keep the zips on Lustre, don't unpack**: 4 files instead of 26,505. Read chips through `zipfile` /
    `/vsizip/`. *(recommended)*
-3. **Keep the paper's Germany year split** (random 412 / 200 by sample, which leaks between windows) so
-   reference numbers apply, and flag it in results. The alternative is a split grouped by chip, which is
-   cleaner but not comparable with the paper. *(recommended: keep the paper's)*
+3. **Decided 2026-11-09: no leaky splits.** AgriBench uses the leak-free splits in 2.1b for all four
+   tasks. The paper's numbers stay as rough sanity checks only.
 4. **Score at native 256 × 256** and add per-class and boundary IoU, while also reporting the paper-style
    resized mIoU. ρ uses the paper's fixed baseline lines. *(recommended)*
 5. **No object-level metrics for now** (the paper doesn't use them). *(recommended)*
