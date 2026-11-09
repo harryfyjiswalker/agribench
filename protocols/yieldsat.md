@@ -129,13 +129,47 @@ The paper's "S2" input is the 12 S2 bands. Its "S2 + ADM" input is all bands. Th
 - **Leave-one-region-out (LORO):** one fold per region. A region is `farm_identifier`, following the
   authors' notebook ("farm_identifier: unique ID for a farm (region)") and the paper's definition: "a set of
   fields belonging to a single farmer or to a local data provider". That's 6–44 folds, depending on the subset.
-- The paper doesn't do leave-one-country-out. It says cross-country and cross-crop settings "led to model
-  collapse" and leaves them to future work. AgriBench can add this later as an **extra track**, labelled as not
-  from the paper.
-
 **Open point:** the paper's weight-space figure for Argentina shows 8 LORO regions, but ARG-S has 44 farms.
 Argentina has 5 provinces, or 8 if you count the inconsistent spellings separately. So the paper may have
 grouped farms differently for that figure. We follow the documented definition (farm) and will ask the authors.
+
+### 2.3b Final evaluation: leave-one-country-out (LOCO) [AgriBench: beyond the paper]
+
+This is AgriBench's **headline YieldSAT result**: can a model trained in some countries predict yield in a
+country it has never seen? The paper doesn't report it. It says cross-country settings "led to model collapse"
+without domain adaptation, which is exactly why it's the most informative test for foundation-model inputs.
+
+- **Per crop, across countries.** Only crops grown in more than one country can be tested:
+
+  | Crop | Countries (fields) | Folds | Training countries per fold |
+  |---|---|---:|---:|
+  | Soybean | Argentina (440), Brazil (293), Uruguay (572) | 3 | 2 |
+  | Wheat | Argentina (126), Brazil (140), Germany (188) | 3 | 2 |
+  | Corn | Argentina (185), Brazil (118) | 2 | 1 |
+  | Rapeseed | Germany only | – | – |
+
+  Each fold holds out one country, trains on all fields of that crop from the other countries, and scores
+  every pixel of the held-out country.
+- **Same metrics as 2.4, but reported per held-out country.** With only 2–3 folds, a mean ± std hides too
+  much. The leaderboard shows R² and RMSE for each held-out country at field and pixel level, plus the mean
+  across countries.
+- **Reference row.** Every LOCO table includes a "training-mean" baseline: predict the training countries'
+  mean yield everywhere. This shows the size of the country shift, and a model that doesn't beat it has
+  collapsed.
+- **Nothing from the held-out country may leak into training.** Any normalisation or imputation is fitted on
+  the training countries' pixels only. The per-country `stats-*` variables in the files must not be used,
+  because each one includes the held-out country's own data.
+- **Treated as a final test, like PASTIS-R fold 5.**
+  - Model and input choices are made on CV10, LOYO and LORO. LOCO is never used to choose.
+  - A LOCO run needs `experiment.confirm_test=true`.
+  - Each run is appended to `/lustre/shared/agriscience-benchmark/runs/yieldsat/loco-ledger.jsonl`, so we
+    can see how many configurations were tried.
+- **Known differences to keep in mind when reading results:**
+  - Seasons are not aligned: German wheat is sown in autumn and harvested in summer, Argentine wheat runs
+    roughly May to December, and the 24 time steps are relative to each field's own season.
+  - Yield levels differ by country (Fig. 4 of the paper).
+  - The input includes coordinates, which point outside the training range for a new country.
+  - Data quality differs a lot. Argentina is 93% "good"; Uruguay and Brazil are mostly "average" or "bad".
 
 ### 2.4 Metrics [paper]
 
@@ -174,7 +208,9 @@ The paper doesn't describe tuning. To keep it honest and the same for every head
 - **The inner split mirrors the outer scheme:**
   - CV10: 3-fold `StratifiedGroupKFold` (stratified by farm, grouped by field);
   - LOYO: `GroupKFold` on year, with k = min(3, number of training years);
-  - LORO: `GroupKFold` on farm, with k = min(3, number of training farms).
+  - LORO: `GroupKFold` on farm, with k = min(3, number of training farms);
+  - LOCO, soybean and wheat: leave one *training* country out (2 inner folds);
+  - LOCO, corn: there's only one training country, so use `GroupKFold` on farm, k = 3, within it.
 - **Selection metric:** pixel-level RMSE, averaged over the inner folds. This is the quantity the models are
   trained to reduce.
 - Heads without a grid are fit once with their defaults. Neural heads take their early-stopping set from the
@@ -194,22 +230,28 @@ pixels within a field are strongly autocorrelated anyway.
 ### 2.8 Frozen fold files and provenance [AgriBench]
 
 - `tools/make_yieldsat_folds.py` (still to write) builds the field tables and writes
-  `/lustre/shared/agriscience-benchmark/splits/yieldsat/<subset>/{cv10,loyo,loro}.csv`, with columns
+  `/lustre/shared/agriscience-benchmark/splits/yieldsat/<subset>/{cv10,loyo,loro}.csv` and
+  `/lustre/shared/agriscience-benchmark/splits/yieldsat/loco/<crop>.csv`, with columns
   `field_shared_name, fold`. It writes them once and refuses to overwrite.
 - Each run records the SHA-256 of its fold file, the input file and the config, as for PASTIS-R.
-- There's no held-out test fold. CV10, LOYO and LORO are all reported as cross-validation, like the paper.
-  Model choices should be made on CV10. LOYO and LORO are reported, not tuned on.
+- **Development:** CV10, LOYO and LORO are reported as cross-validation, like the paper. Model choices are
+  made on CV10. LOYO and LORO are reported, not tuned on.
+- **Final:** LOCO (2.3b) is run only for configurations chosen on the development schemes, and every run is
+  logged in the ledger.
 
 ### 2.9 What a result contains
 
 For each model × input × subset × scheme:
 
-- R² and RMSE, as mean ± std over folds, at pixel and field level;
+- R² and RMSE, as mean ± std over folds, at pixel and field level (for LOCO, one value per held-out country);
 - the number of folds, test fields and test pixels;
 - the pixel cap, seed, and fold-file and input hashes.
 
-The leaderboard has one table per scheme, with the nine subsets as columns, laid out like the paper's
-Tables 13–18.
+The leaderboard has:
+- **the final LOCO table first**, with one column per crop × held-out country (8 columns) and the
+  training-mean baseline as a reference row;
+- one table per development scheme (CV10, LOYO, LORO), with the nine subsets as columns, laid out like the
+  paper's Tables 13–18.
 
 ---
 
@@ -226,10 +268,16 @@ only. The LSTM is the closest of the paper's models to a pixel-wise tabular head
 The best overall model in the paper, AFF (feature fusion of S2 and ADM, 3D context), gets 0.84 / 0.49 for
 ARG-S at field level.
 
-## 4. Decisions to confirm before running
+## 4. Decisions
+
+Agreed (2026-11-09):
+
+- **Leave-one-country-out is the final evaluation** and AgriBench's headline YieldSAT result, run per crop
+  across countries (2.3b).
+
+Still to confirm before running:
 
 1. Region for LORO = `farm_identifier` (2.3).
 2. Nested tuning, selected by pixel RMSE (2.6).
 3. Training cap of 256 pixels per field (2.7).
 4. Include all quality levels, as the paper does. An optional "good only" ablation could come later.
-5. Leave-one-country-out only as a separate, clearly labelled extra track.
