@@ -94,6 +94,10 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 | `galileo` | [Galileo](https://github.com/nasaharvest/galileo)-Base embedding of the pixel's Sentinel-2 time series | 768 |
 | `aef` | [AlphaEarth Foundations](https://arxiv.org/abs/2507.22291) annual embedding for the harvest year | 64 |
 | `tessera` | [TESSERA](https://arxiv.org/abs/2506.20380) annual embedding for the harvest year | 128 |
+| `copernicusfm` | [Copernicus-FM](https://arxiv.org/abs/2503.11849) image embedding of the field's peak-greenness Sentinel-2 scene, sampled at the pixel | 768 |
+| `dofa` | [DOFA](https://arxiv.org/abs/2403.15356) image embedding of the peak-greenness scene, sampled at the pixel | 768 |
+| `croma` | [CROMA](https://arxiv.org/abs/2311.00566) optical-encoder embedding of the peak-greenness scene, sampled at the pixel | 768 |
+| `softcon` | [SoftCon](https://arxiv.org/abs/2405.20462) image embedding of the peak-greenness scene, sampled at the pixel | 768 |
 
 A location encoder gives a pixel the same embedding every year, so on its own it can't follow year-to-year
 changes in yield. It is meant to be combined with an input that changes over time, such as `s2+mind`. How each
