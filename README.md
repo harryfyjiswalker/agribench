@@ -6,8 +6,7 @@ scores it with that dataset's official cross-validation and a fixed tuning proce
 [Anunna](https://wiki.anunna.wur.nl) with shared data, features and environments, so results from different
 people are directly comparable.
 
-**Results:** [dashboard](https://harryfyjiswalker.github.io/agribench/) (YieldSAT; updates whenever results
-are pushed) · PASTIS-R table [below](#results).
+**Results:** [dashboard](https://harryfyjiswalker.github.io/agribench/), updated whenever results are pushed.
 
 ## Datasets
 
@@ -125,25 +124,10 @@ downloading and has no runner yet.
 
 ## Results
 
-- **YieldSAT and future datasets:** the [dashboard](https://harryfyjiswalker.github.io/agribench/). It reads
-  the tables in `results/<dataset>/`, which sweeps write; commit and push a table to publish it.
-- **PASTIS-R** (validation fold 4; publish a run with `tools/export_result.py <run folder> <short-name>`, then
-  commit `results/<short-name>.json`; this table rebuilds automatically):
-
-<!-- leaderboard:start -->
-
-
-| Run | Model | Representation | Sensors | Train → validation folds | Train parcels | Validation parcels | Seed | Epoch | Parcel mIoU | Accuracy | Macro F1 |
-|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|
-| [`s2-tabpfn35-fast-full-pilot`](results/s2-tabpfn35-fast-full-pilot.json) | tabpfn | Parcel summaries | S2 | 1, 2, 3 → 4 | 51,833 | 17,478 | 42 | — | 0.702 | 0.906 | 0.807 |
-| [`s2-galileo-base-logistic-regression-full-pilot`](results/s2-galileo-base-logistic-regression-full-pilot.json) | logistic_regression | Galileo Base embeddings | S2 | 1, 2, 3 → 4 | 51,833 | 17,478 | 42 | — | 0.605 | 0.873 | 0.726 |
-| [`s2-galileo-base-tabpfn35-fast-full-pilot`](results/s2-galileo-base-tabpfn35-fast-full-pilot.json) | tabpfn | Galileo Base embeddings | S2 | 1, 2, 3 → 4 | 51,833 | 17,478 | 42 | — | 0.596 | 0.874 | 0.717 |
-| [`s2-logistic-regression-full-pilot-43601671`](results/s2-logistic-regression-full-pilot-43601671.json) | logistic_regression | Parcel summaries | S2 | 1, 2, 3 → 4 | 51,833 | 17,478 | 42 | — | 0.596 | 0.865 | 0.717 |
-| [`s2-rf-full-pilot`](results/s2-rf-full-pilot.json) | rf | Parcel summaries | S2 | 1, 2, 3 → 4 | 51,833 | 17,478 | 42 | — | 0.508 | 0.840 | 0.618 |
-| [`s2-pse-ltae-1epoch-seed42`](results/s2-pse-ltae-1epoch-seed42.json) | adapted_pse_ltae2d | Parcel pixel sets | S2 | 1, 2, 3 → 4 | 51,833 | 17,478 | 42 | 1 | 0.308 | 0.737 | 0.384 |
-
-
-<!-- leaderboard:end -->
+All results go to the [dashboard](https://harryfyjiswalker.github.io/agribench/), one view per dataset. It reads
+the aggregate tables in `results/<dataset>/`, which the sweep tools write; commit and push a table to publish it.
+YieldSAT is there now; EarthShift and PLANTEUR join when their first results are in. (The early PASTIS-R pilot
+runs are listed in [LEADERBOARD.md](LEADERBOARD.md).)
 
 The repo is public. Commit aggregate scores only: never field names, locations, fold lists or predictions (the
 datasets have their own licences).
