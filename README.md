@@ -31,7 +31,7 @@
   - Pixel-level (10 m) yield maps for 2,173 fields in Argentina, Brazil, Germany and Uruguay (corn, rapeseed,
     soybean, wheat, 2016–2024), with Sentinel-2, weather, soil and topography inputs. Scored per country–crop
     subset with the paper's stratified grouped 10-fold CV, leave-one-year-out and leave-one-region-out splits;
-    the final evaluation is leave-one-country-out per crop. Protocol (draft):
+    the final evaluation is leave-one-country-out per crop. Protocol:
     [protocols/yieldsat.md](protocols/yieldsat.md).
 
 ## Phenology Detection
