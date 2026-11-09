@@ -1,0 +1,11 @@
+name: ridge
+impute: true
+estimator:
+  _target_: sklearn.pipeline.make_pipeline
+  _args_:
+    - _target_: sklearn.preprocessing.StandardScaler
+    - _target_: sklearn.linear_model.Ridge
+      alpha: 1.0
+search:
+  param_grid:
+    ridge__alpha: [0.1, 1.0, 10.0, 100.0]

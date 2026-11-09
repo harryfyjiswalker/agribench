@@ -1,0 +1,10 @@
+# Needs a GPU: sbatch --partition=gpu --gres=gpu:1 --mem=64G yieldsat.sbatch ... model=tabpfn
+# Not usable yet (2026-11-09): only a TabPFN *classifier* checkpoint is on Anunna. Put a regressor checkpoint at
+# the path below (or set AGRIBENCH_TABPFN_REG_CKPT) before running.
+name: tabpfn
+impute: false
+estimator:
+  _target_: tabpfn.TabPFNRegressor
+  model_path: ${oc.env:AGRIBENCH_TABPFN_REG_CKPT,/lustre/shared/agriscience-benchmark/checkpoints/tabpfn/tabpfn-regressor.ckpt}
+  device: cuda
+  random_state: ${experiment.seed}

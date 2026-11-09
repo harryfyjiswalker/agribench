@@ -97,6 +97,26 @@ take under 10 minutes. Everyone's runs in one table (add `--smoke` to include sm
 Each run writes `$project/runs/pastis/$USER/<time>-<jobid>/` with `metrics.json` (accuracy, macro IoU, macro F1),
 predictions and the resolved config.
 
+### Run an experiment (YieldSAT)
+
+    sbatch yieldsat.sbatch subset=ARG-S scheme=cv10 input=s2 model=rf
+
+| Choice | Options |
+|---|---|
+| `subset=` | `ARG-C`, `ARG-S`, `ARG-W`, `BRA-C`, `BRA-S`, `BRA-W`, `GER-R`, `GER-W`, `URG-S` (country–crop) |
+| `scheme=` | `cv10` (standard 10-fold), `loyo` (leave one year out), `loro` (leave one region out), `loco` (leave one country out, the final evaluation) |
+| `input=` | `s2` (Sentinel-2 only), `s2-adm` (plus weather, soil, topography, coordinates) |
+| `model=` | `mean` (reference), `ridge`, `rf`, `extra_trees`, `xgboost`, `lightgbm` |
+
+- `scheme=loco` takes `crop=corn|soybean|wheat` instead of `subset=`. It needs `experiment.confirm_test=true`,
+  and each run is logged in `$project/runs/yieldsat/loco-ledger.jsonl`. Pick models on the other schemes first.
+- Add `experiment.smoke=true` for a quick plumbing check (2 folds, a few pixels per field, scores meaningless).
+- Each run writes `$project/runs/yieldsat/$USER/<time>-<jobid>/metrics.json`, with R² and RMSE at pixel and
+  field level per fold, mean ± std over folds and pooled. It also saves per-pixel predictions and the tuning
+  results.
+- How folds, tuning, the 256-pixel training cap and the metrics work: [protocols/yieldsat.md](protocols/yieldsat.md).
+  Folds and feature caches are already built on Anunna; `prepare.sbatch` rebuilds them if needed.
+
 ## 4. Where things live
 
 | Path | Contents |
