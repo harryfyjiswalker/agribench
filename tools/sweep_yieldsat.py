@@ -6,7 +6,7 @@
 Every (subset, scheme, input, model) combination writes to runs/yieldsat/sweeps/<name>/<subset>/<scheme>/<input>/
 <model>/. CPU heads run one array task per outer fold, so the folds of a run execute in parallel; GPU heads (TabPFN,
 TabICL) run all folds of a run in one task, so each GPU job loads the model once. Tasks whose result already exists
-are skipped, so re-running the same command resumes a sweep. At most --max-running tasks of an array run at once
+are skipped, so re-running the same command resumes a sweep. At most --max-running tasks of the sweep run at once (split evenly over its arrays)
 (Anunna guidance: keep Lustre-heavy arrays at about 200). A final CPU job (afterany) combines the folds of every
 run and writes the public aggregate table results/yieldsat/<name>.csv.
 
@@ -111,6 +111,7 @@ def main():
         res = RESOURCES[model]
         wide = widths[spec] > 600
         groups.setdefault((model, wide), []).append(overrides)
+    per_array = max(1, args.max_running // max(1, len(groups)))  # the cap is for the whole sweep, not per array
     for (model, wide), items in sorted(groups.items()):
         res = RESOURCES[model]
         tag = f"{model}-{'wide' if wide else 'narrow'}"
@@ -118,7 +119,7 @@ def main():
         if not args.dry_run:
             tfile.write_text("".join(" ".join(shlex.quote(o) for o in ov) + "\n" for ov in items))
         cmd = [f"{SLURM}/sbatch", "--parsable", f"--job-name=ys-{args.name}-{tag}",
-               f"--array=0-{len(items) - 1}%{args.max_running}", f"--cpus-per-task={res['cpus']}",
+               f"--array=0-{len(items) - 1}%{per_array}", f"--cpus-per-task={res['cpus']}",
                f"--mem={res['wide_mem'] if wide else res['mem']}", f"--time={res['time']}",
                f"--output={log_dir}/{tag}-%A_%a.log", "--partition=gpu" if res["gpu"] else "--partition=main"]
         if res["gpu"]:
