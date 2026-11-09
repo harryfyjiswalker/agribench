@@ -85,7 +85,7 @@ def field_embeddings(lat, lon, year, tiles):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--subset", choices=ys.SUBSETS, required=True)
-    parser.add_argument("--threads", type=int, default=16)
+    parser.add_argument("--threads", type=int, default=8)
     args = parser.parse_args()
     out_dir = ys.FEATURES / "aef"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -112,7 +112,13 @@ def main():
         f = fields[fidx[a]]
         if years[f] not in YEARS:
             return j, None
-        return j, field_embeddings(latlon[a:b, 0], latlon[a:b, 1], years[f], tiles)
+        for attempt in range(6):  # transient HTTP read errors happen; back off and retry, then fail loudly
+            try:
+                return j, field_embeddings(latlon[a:b, 0], latlon[a:b, 1], years[f], tiles)
+            except rasterio.errors.RasterioIOError as error:
+                if attempt == 5:
+                    raise RuntimeError(f"{f}: {error}") from error
+                time.sleep(10 * 2 ** attempt)
 
     done = 0
     with ThreadPoolExecutor(args.threads) as pool:

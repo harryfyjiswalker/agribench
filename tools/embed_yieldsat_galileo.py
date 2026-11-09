@@ -2,7 +2,8 @@
 
 Input per pixel: its 24-slot Sentinel-2 series (the 10 bands Galileo knows, plus NDVI computed from B8 and B4) as
 a 1x1 pixel time series, with each slot's calendar month as Galileo's month token. YieldSAT stores each slot as a
-day offset from the field's seeding date, so a slot's month is month(seeding_date + offset). Slots without an S2
+day offset from one reference date per country file (the CF `units` attribute of `times`, e.g. "days since
+2019-09-22"), so a slot's date is reference + offset. Slots without an S2
 observation are masked. Weather, topography and location are deliberately left out, so "galileo" is comparable to
 the raw `s2` input and location only enters through the location encoders.
 
@@ -39,7 +40,11 @@ def slot_months(subset, fields):
     with h5py.File(ys.preprocessed_file(country), "r") as h:
         code = h["field_shared_name"][:]
         labels = code_labels(h, "field_shared_name")
-        seeding = code_labels(h, "seeding_date")
+        units = h["times"].attrs["units"]
+        units = units.decode() if isinstance(units, bytes) else str(units)
+        if not units.startswith("days since "):
+            raise ValueError(f"Unexpected time units {units!r}")
+        reference = dt.date.fromisoformat(units.removeprefix("days since ")[:10])
         starts = np.r_[0, np.flatnonzero(np.diff(code)) + 1]
         stops = np.r_[starts[1:], len(code)]
         rows = {labels[int(code[a])]: (int(a), int(b)) for a, b in zip(starts, stops)}
@@ -51,9 +56,8 @@ def slot_months(subset, fields):
             t_first, t_last = h["times"][a], h["times"][b - 1]
             if not np.array_equal(t_first, t_last, equal_nan=True):
                 raise ValueError(f"{f}: slot offsets differ between pixels of one field")
-            seed = dt.date.fromisoformat(seeding[int(h["seeding_date"][a])])
             ok = np.isfinite(t_first)
-            d = [seed + dt.timedelta(days=float(t)) if o else None for t, o in zip(t_first, ok)]
+            d = [reference + dt.timedelta(days=float(t)) if o else None for t, o in zip(t_first, ok)]
             months[i] = [x.month - 1 if x else 0 for x in d]
             exists[i] = ok
             dates[f] = d
@@ -180,7 +184,7 @@ def main():
                  "pixels_per_second": round(n / (time.time() - t0), 1), "date_check": date_check,
                  "aligned_with": f"v1/{args.subset}-meta.npz",
                  "v1_meta_sha256": ys.sha256(ys.FEATURES / "v1" / f"{args.subset}-meta.npz"),
-                 "input": "S2 10 bands + NDVI, 24 slots, months from seeding date + slot offset, 1x1 pixel",
+                 "input": "S2 10 bands + NDVI, 24 slots, months from the file's time reference + slot offset, 1x1 pixel",
                  "normalization": "(x - (mean - 2 std)) / (4 std), Galileo upstream statistics",
                  "pooling": "Galileo average_tokens", "source_revision": SOURCE_REVISION,
                  "weights_sha256": {p.name: ys.sha256(p) for p in sorted(WEIGHTS.iterdir())}}
