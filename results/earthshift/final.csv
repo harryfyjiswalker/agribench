@@ -3,8 +3,8 @@ earthshift,location,de-geo,Germany → Cambodia,galileo-base,frozen,0.001,5,55.0
 earthshift,location,de-geo,Germany → Denmark,galileo-base,frozen,0.001,5,55.01,0.06,41.47,0.14,13.54,0.14,12.06,0.14,0.0,0.0
 earthshift,temporal,de-year,Germany 2018 → 2019,galileo-base,frozen,0.005,5,53.68,0.09,54.82,0.07,-1.14,0.07,2.27,0.07,0.0,0.0
 earthshift,temporal,za-season,South Africa A → B,galileo-base,frozen,0.005,5,49.9,0.08,46.48,0.73,3.42,0.74,-2.22,0.74,0.0,0.0
-earthshift,location,de-geo,Germany → Cambodia,galileo-base,full,6e-05,4,55.34,0.07,23.47,2.05,31.87,2.07,-3.95,2.07,0.61,0.03
-earthshift,location,de-geo,Germany → Denmark,galileo-base,full,6e-05,4,55.34,0.07,41.37,0.47,13.97,0.41,13.95,0.43,0.61,0.47
+earthshift,location,de-geo,Germany → Cambodia,galileo-base,full,6e-05,5,55.34,0.06,23.14,1.92,32.2,1.94,-4.28,1.93,0.6,0.03
+earthshift,location,de-geo,Germany → Denmark,galileo-base,full,6e-05,5,55.34,0.06,41.23,0.51,14.11,0.47,13.81,0.48,0.6,0.47
 earthshift,temporal,de-year,Germany 2018 → 2019,galileo-base,full,0.0003,5,53.56,0.42,54.92,0.09,-1.36,0.39,3.49,0.34,0.41,0.29
 earthshift,temporal,za-season,South Africa A → B,galileo-base,full,0.0003,5,51.57,0.18,50.08,0.18,1.5,0.1,0.39,0.1,0.06,0.04
 earthshift,location,de-geo,Germany → Cambodia,resnet50-imagenet,frozen,0.005,5,48.28,0.26,18.78,2.44,29.5,2.4,-5.24,2.4,0.0,0.0

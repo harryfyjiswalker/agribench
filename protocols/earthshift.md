@@ -1,7 +1,8 @@
 # EarthShift field-delineation evaluation protocol
 
 Status: **agreed 2026-11-09 (section 6). Data downloaded and verified, split files frozen and input cache built
-on Anunna (2026-11-09). Training code written (section 4); first sweeps running.** This page sets
+on Anunna (2026-11-09). First results in for ResNet-50 (ImageNet and random) and Galileo Base, frozen and
+fully fine-tuned, 5 seeds each (section 4b, 2026-11-09).** This page sets
 how AgriBench scores a model on EarthShift's field-delineation tasks, so results are comparable with the
 paper and with each other. Sections marked **[paper]** follow Doerksen and Kerner (2026) or their released
 code exactly. Sections marked **[AgriBench]** fill gaps the paper leaves open or go beyond it.
@@ -485,6 +486,68 @@ Cambodia and Denmark. `de-year` and `za-season` are the two temporal tasks. Each
 **Cost per run** on an A100 (Germany location split, 528 samples): ResNet-50 about 50 s, Galileo frozen
 about 5 min, Galileo full fine-tuning about 14 min. A full sweep (9 rates × 5 seeds × 2 shifts × 2
 settings) is about 1 GPU-hour for each ResNet and about 25 GPU-hours for Galileo.
+
+## 4b. Results [AgriBench]
+
+Final runs finished 2026-11-09. mIoU (%) at each model's resized input size (2.4), mean ± std over 5 seeds, on
+the leak-free splits (2.1b). ρ = OOD − β(ID), using the paper's fitted lines (2.4); ρ > 0 means more robust than
+the paper's model population. Learning rates were picked on ID validation only (2.3). Public aggregate table:
+`results/earthshift/final.csv`, written by `python -m tools.earthshift_results --csv`.
+
+**Chosen learning rates** (frozen / full):
+
+| Model | Location | Temporal |
+|---|---|---|
+| Galileo Base | 1e-3 / 6e-5 | 5e-3 / 3e-4 |
+| ResNet-50 ImageNet | 5e-3 / 3e-3 | 1e-4 / 6e-3 |
+| ResNet-50 random | 3e-4 / 3e-4 | 5e-4 / 1e-3 |
+
+Two sit on the edge of the paper's fixed grid: ResNet-50 ImageNet temporal, 1e-4 frozen (lowest) and 6e-3 full
+(highest). The grid is the paper's, so it stays as it is.
+
+**Location shift** (one Germany model, scored on the Germany ID test, Cambodia and Denmark):
+
+| Model | Setting | Germany ID | Cambodia | Δ | ρ | Denmark | Δ | ρ |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| Galileo Base | frozen | 55.01 ± 0.06 | 21.16 ± 0.73 | 33.85 | −8.25 | 41.47 ± 0.14 | 13.54 | +12.06 |
+| Galileo Base | full | 55.34 ± 0.06 | 23.14 ± 1.92 | 32.20 | −4.28 | 41.23 ± 0.51 | 14.11 | +13.81 |
+| ResNet-50 ImageNet | frozen | 48.28 ± 0.26 | 18.78 ± 2.44 | 29.50 | −5.24 | 33.49 ± 1.10 | 14.79 | +9.47 |
+| ResNet-50 ImageNet | full | 53.05 ± 0.10 | 13.44 ± 2.28 | 39.62 | −12.33 | 39.13 ± 1.24 | 13.93 | +13.36 |
+| ResNet-50 random | frozen | 44.95 ± 1.19 | 20.55 ± 1.21 | 24.40 | −0.81 | 29.52 ± 1.05 | 15.43 | +8.16 |
+| ResNet-50 random | full | 52.63 ± 0.15 | 16.41 ± 1.75 | 36.21 | −9.04 | 36.76 ± 0.44 | 15.86 | +11.31 |
+
+**Temporal shift:**
+
+| Model | Setting | DE 2018 ID | DE 2019 OOD | Δ | ρ | ZA window A ID | ZA window B OOD | Δ | ρ |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Galileo Base | frozen | 53.68 ± 0.09 | 54.82 ± 0.07 | −1.14 | +2.27 | 49.90 ± 0.08 | 46.48 ± 0.73 | 3.42 | −2.22 |
+| Galileo Base | full | 53.56 ± 0.42 | 54.92 ± 0.09 | −1.36 | +3.49 | 51.57 ± 0.18 | 50.08 ± 0.18 | 1.50 | +0.39 |
+| ResNet-50 ImageNet | frozen | 44.20 ± 0.86 | 46.99 ± 0.39 | −2.79 | +4.10 | 39.33 ± 0.98 | 37.01 ± 2.88 | 2.32 | −0.91 |
+| ResNet-50 ImageNet | full | 50.69 ± 0.42 | 52.31 ± 0.28 | −1.62 | +3.40 | 46.20 ± 0.40 | 45.50 ± 0.93 | 0.69 | +0.55 |
+| ResNet-50 random | frozen | 38.65 ± 1.78 | 42.48 ± 1.41 | −3.82 | +5.25 | 38.87 ± 0.94 | 36.97 ± 1.30 | 1.90 | −0.47 |
+| ResNet-50 random | full | 50.72 ± 0.21 | 52.13 ± 0.16 | −1.41 | +3.20 | 45.72 ± 0.18 | 44.60 ± 0.27 | 1.12 | +0.06 |
+
+Standard deviations of Δ and ρ are in the CSV. Native-resolution (256 × 256) mIoU is within 0.03 points of
+these everywhere, so it changes nothing.
+
+What these show:
+
+- **Galileo Base is best in distribution and on Denmark**, frozen or fully fine-tuned. Frozen Galileo is within
+  0.3 points of fully fine-tuned Galileo on every ID test.
+- **Cambodia remains the hard case, as in the paper.** Every model loses 24–40 points. Frozen random ResNet-50
+  (20.6) is level with frozen Galileo (21.2) and ahead of every fine-tuned ResNet. Full fine-tuning raises the
+  Germany score but lowers the Cambodia score for both ResNets, the paper's "fine-tuning hurts far OOD"
+  pattern; Galileo is the exception (21.2 → 23.1).
+- **The temporal tasks barely move**, as in the paper: Germany 2019 again scores *above* 2018 for every model,
+  and South Africa loses 1–3 points.
+- **Against the paper (section 3, not like-for-like):** the OOD sets are the same, and our OOD scores are
+  similar or a little higher (Galileo frozen: Cambodia 21.2 vs 17.7, Denmark 41.5 vs 33.8). Our ID scores are
+  also a few points higher despite the leak-free splits; the ID test sets differ, so the gap is not meaningful.
+- **The boundary class is never predicted.** Boundary IoU is 0.00–0.6 for every model, seed and test set, so
+  mIoU here is effectively (background IoU + field IoU) / 3, at most about 67. This follows from the paper's
+  recipe (unweighted cross-entropy, no augmentation, stride-8 (Galileo) or stride-32 (ResNet) features for 1–2 px boundaries), and
+  the paper's numbers are in the same range, so it is kept for comparability. A class-weighted loss would be a
+  separate AgriBench variant (not run).
 
 ## 5. Out of scope
 
