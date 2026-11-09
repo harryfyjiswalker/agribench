@@ -1,11 +1,14 @@
 {
-  "updated": "2026-11-09 22:15 CET",
+  "updated": "2026-11-09 22:58 CET",
   "files": [
     {
       "path": "earthshift/final.csv"
     },
     {
       "path": "yieldsat/gpu1.csv"
+    },
+    {
+      "path": "yieldsat/gpu2.csv"
     },
     {
       "path": "yieldsat/phase1.csv"
