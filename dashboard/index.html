@@ -57,6 +57,7 @@ th:hover { color: var(--text-primary); }
 th.l, td.l { text-align: left; }
 td.cell { border-left: 2px solid var(--surface-1); }
 th .arrow { color: var(--accent); }
+.hidden { display: none !important; }
 .empty { color: var(--text-muted); padding: 24px 0; }
 #tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
@@ -69,15 +70,18 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
 <body>
 <main>
   <h1>AgriBench results</h1>
-  <p class="lede">Frozen feature representations (raw inputs, location encoders, geospatial foundation models) scored under
+  <p class="lede ys">Frozen feature representations (raw inputs, location encoders, geospatial foundation models) scored under
     each dataset's official cross-validation, with a fixed set of heads. Leave-one-year-out and leave-one-region-out default to R² pooled over folds.</p>
+  <p class="lede es hidden">EarthShift field delineation: segmentation models trained on one region or year (in-distribution, ID) and
+    tested on another (out-of-distribution, OOD), following the EarthShift paper's tasks and metrics. Scores are mIoU in percentage points, mean over seeds.</p>
   <p class="meta" id="meta">Loading results…</p>
 
   <section class="card">
     <div class="filters">
       <label>Dataset <select id="f-dataset"></select></label>
-      <label>Scheme <select id="f-scheme"></select></label>
-      <label>Metric <select id="f-metric">
+      <label class="es hidden">Test set <select id="f-testset"></select></label>
+      <label class="ys">Scheme <select id="f-scheme"></select></label>
+      <label class="ys">Metric <select id="f-metric">
         <option value="pooled_field_r2">Field R², pooled over folds (higher is better)</option>
         <option value="field_r2">Field R², mean of folds (higher is better)</option>
         <option value="field_rmse">Field RMSE, t/ha, mean of folds (lower is better)</option>
@@ -85,18 +89,18 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
         <option value="pixel_r2">Pixel R², mean of folds (higher is better)</option>
         <option value="pixel_rmse">Pixel RMSE, t/ha, mean of folds (lower is better)</option>
       </select></label>
-      <label>Head (table) <select id="f-model"></select></label>
+      <label class="ys">Head (table) <select id="f-model"></select></label>
     </div>
   </section>
 
-  <section class="card">
+  <section class="card ys">
     <h2>Which representation works best?</h2>
     <p class="note" id="chart-note">Mean over subsets that have a result for every head shown. Hover a marker for the per-subset spread.</p>
     <div class="legend" id="legend"></div>
     <div class="chart-wrap"><svg id="chart" role="img" aria-label="Score by input and head"></svg></div>
   </section>
 
-  <section class="card">
+  <section class="card ys">
     <h2>Per subset</h2>
     <p class="note" id="metric-note"></p>
     <p class="note">Each cell is one subset's score; hover for ± std over folds and fold count. Shading is a fixed scale for R²
@@ -104,8 +108,25 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
     <div class="table-wrap"><table id="table"></table></div>
   </section>
 
+  <section class="card es hidden">
+    <h2>How much does each model lose under the shift?</h2>
+    <p class="note">Each row is one model and training setting. The left marker is the in-distribution test score, the right
+      one the out-of-distribution score; the line between them is the drop. Rows are sorted by OOD score. Hover for ± std over seeds.</p>
+    <div class="legend" id="es-legend"></div>
+    <div class="chart-wrap"><svg id="es-chart" role="img" aria-label="ID and OOD mIoU by model"></svg></div>
+  </section>
+
+  <section class="card es hidden">
+    <h2>Robustness table</h2>
+    <p class="note">Δ = ID − OOD (lower is better). ρ is effective robustness: the OOD score minus what the paper's fitted
+      ID-to-OOD line predicts for that ID score (higher is better; 0 means as robust as the paper's models on average).
+      Boundary IoU is measured at native 256 × 256 resolution. Learning rates were chosen on ID validation data only.</p>
+    <div class="table-wrap"><table id="es-table"></table></div>
+  </section>
+
   <footer>
-    Protocols: <a href="https://github.com/harryfyjiswalker/agribench/blob/main/protocols/yieldsat.md">YieldSAT</a> ·
+    Protocols: <a href="https://github.com/harryfyjiswalker/agribench/blob/main/protocols/yieldsat.md">YieldSAT</a>,
+    <a href="https://github.com/harryfyjiswalker/agribench/blob/main/protocols/earthshift.md">EarthShift</a> ·
     Code and raw tables: <a href="https://github.com/harryfyjiswalker/agribench">github.com/harryfyjiswalker/agribench</a>
     (<code>results/</code>). Leave-one-country-out (the final evaluation) is reported separately once models are chosen.
   </footer>
@@ -119,6 +140,10 @@ const SHAPES = ["circle", "square", "diamond", "triangle"];
 const SCHEME_LABEL = {cv10: "Random 10-fold (grouped by field)", loyo: "Leave one year out", loro: "Leave one region out", loco: "Leave one country out"};
 const INPUT_LABEL = {"s2": "Raw S2", "s2-adm": "Raw S2 + weather, soil, topo", latlon: "Lat/lon", mind: "MIND", satclip: "SatCLIP",
   "s2-aligned": "S2 aligned to sowing", "s2-gdd": "S2 on thermal time", "s2-harmonic": "S2 harmonics", biophys: "Biophysical (SNAP)", arcvae: "ARC-VAE", galileo: "Galileo", aef: "AlphaEarth", tessera: "TESSERA"};
+const DATASET_LABEL = {yieldsat: "YieldSAT (yield)", earthshift: "EarthShift (field delineation)"};
+const ES_MODEL_LABEL = {resnet50: "ResNet-50", "resnet50-imagenet": "ResNet-50 (ImageNet)", galileo: "Galileo", "galileo-base": "Galileo base"};
+const ES_SETTING_LABEL = {frozen: "frozen encoder", full: "full fine-tuning"};
+const esLabel = r => `${ES_MODEL_LABEL[r.model] || r.model} · ${ES_SETTING_LABEL[r.setting] || r.setting}`;
 const label = s => s.split("+").map(b => INPUT_LABEL[b] || b).join(" + ");
 let ROWS = [];
 let sort = {key: "mean", dir: -1};
@@ -131,7 +156,7 @@ function parseCSV(text) {
   const [head, ...lines] = text.trim().split(/\r?\n/);
   const cols = head.split(",");
   return lines.filter(Boolean).map(l => { const v = l.split(","); const o = {};
-    cols.forEach((c, i) => { const x = v[i]; o[c] = x !== "" && !isNaN(+x) && !["subset","scheme","input","model","dataset","git_commit","sweep"].includes(c) ? +x : x; });
+    cols.forEach((c, i) => { const x = v[i]; o[c] = x !== "" && !isNaN(+x) && !["subset","scheme","input","model","dataset","git_commit","sweep","shift","task","test_set","setting"].includes(c) ? +x : x; });
     return o; });
 }
 async function load() {
@@ -144,8 +169,10 @@ async function load() {
     if (r.ok) ROWS.push(...parseCSV(await r.text()));
   }
   document.getElementById("meta").textContent =
-    `${ROWS.length} runs · updated ${index.updated} · sweeps: ${[...new Set(ROWS.map(r => r.sweep))].join(", ")}`;
-  fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))], d => d === "yieldsat" ? "YieldSAT" : d);
+    `${ROWS.length} result rows · updated ${index.updated} · sweeps: ${[...new Set(ROWS.map(r => r.sweep).filter(Boolean))].join(", ")}`;
+  fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))], d => DATASET_LABEL[d] || d);
+  fill("f-testset", [...new Set(ROWS.filter(r => r.dataset === "earthshift").map(r => r.test_set))], t => t);
+  document.getElementById("f-testset").addEventListener("change", render);
   fill("f-scheme", ["cv10", "loyo", "loro"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
   fill("f-model", HEAD_ORDER.filter(m => ROWS.some(r => r.model === m)), m => HEAD_LABEL[m] || m);
   for (const id of ["f-dataset", "f-metric", "f-model"]) document.getElementById(id).addEventListener("change", render);
@@ -175,6 +202,10 @@ const fmt = (m, v) => v == null || isNaN(v) ? "–" : v.toFixed(m.endsWith("r2")
 
 function render() {
   const ds = val("f-dataset"), scheme = val("f-scheme"), metric = val("f-metric");
+  const es = ds === "earthshift";
+  document.querySelectorAll(".ys").forEach(el => el.classList.toggle("hidden", es));
+  document.querySelectorAll(".es").forEach(el => el.classList.toggle("hidden", !es));
+  if (es) return renderEarthShift(ROWS.filter(r => r.dataset === "earthshift" && r.test_set === val("f-testset")));
   const rows = ROWS.filter(r => r.dataset === ds && r.scheme === scheme);
   document.getElementById("metric-note").textContent = metric.endsWith("r2") && scheme !== "cv10" ? POOLED_NOTE : "";
   renderChart(rows, metric);
@@ -230,6 +261,46 @@ function renderChart(rows, metric) {
   document.getElementById("chart-note").textContent =
     `Mean of the per-subset scores. For each input, only subsets that every shown head has are used; (k/${allSubsets.length}) marks an input with results on k subsets so far. Hover a marker for the spread across subsets.`;
   svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
+}
+function renderEarthShift(rows) {
+  const svg = document.getElementById("es-chart"), t = document.getElementById("es-table");
+  const f1 = v => v == null || isNaN(v) ? "–" : v.toFixed(1);
+  const pm = (m, sd) => `${f1(m)} ± ${f1(sd)}`;
+  const [idName, oodName] = (val("f-testset") || "ID → OOD").split("→").map(x => x.trim());
+  document.getElementById("es-legend").innerHTML =
+    `<span><svg width="14" height="14">${marker("circle", 7, 7, 5, "var(--series-1)")}</svg>ID test (${idName})</span>` +
+    `<span><svg width="14" height="14">${marker("square", 7, 7, 5, "var(--series-2)")}</svg>OOD test (${oodName})</span>`;
+  if (!rows.length) {
+    svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">No EarthShift results published yet.</text>`;
+    t.innerHTML = ""; return;
+  }
+  rows = [...rows].sort((a, b) => b.ood_miou_mean - a.ood_miou_mean);
+  const W = Math.max(svg.parentElement.clientWidth, 520), L = 230, R = 24, T = 28, rowH = 34, H = T + rows.length * rowH + 8;
+  svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const hi = Math.max(...rows.flatMap(r => [r.id_miou_mean, r.ood_miou_mean])) * 1.06, lo = 0;
+  const x = v => L + (v - lo) / (hi - lo) * (W - L - R);
+  let g = "";
+  for (const tk of niceTicks(lo, hi, 6)) g += `<line x1="${x(tk)}" x2="${x(tk)}" y1="${T - 6}" y2="${H - 8}" stroke="var(--grid)"/>` +
+    `<text x="${x(tk)}" y="${T - 12}" text-anchor="middle">${tk}</text>`;
+  rows.forEach((r, k) => {
+    const y = T + k * rowH + rowH / 2;
+    const tip = `<b>${esLabel(r)}</b><br>ID: ${pm(r.id_miou_mean, r.id_miou_std)} · OOD: ${pm(r.ood_miou_mean, r.ood_miou_std)}` +
+      `<br>Δ ${pm(r.delta_mean, r.delta_std)} · ρ ${pm(r.rho_mean, r.rho_std)}<br>${r.seeds} seeds · learning rate ${r.lr}`;
+    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${esLabel(r)}</text>`;
+    g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">` +
+      `<line x1="${x(r.ood_miou_mean)}" x2="${x(r.id_miou_mean)}" y1="${y}" y2="${y}" stroke="var(--text-muted)" stroke-width="2"/>` +
+      marker("circle", x(r.id_miou_mean), y, 5.5, "var(--series-1)", true) +
+      marker("square", x(r.ood_miou_mean), y, 5.5, "var(--series-2)", true) +
+      `<rect x="${x(Math.min(r.id_miou_mean, r.ood_miou_mean)) - 12}" y="${y - 12}" width="${Math.abs(x(r.id_miou_mean) - x(r.ood_miou_mean)) + 24}" height="24" fill="transparent"/></g>`;
+  });
+  svg.innerHTML = g;
+  svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
+  const cols = ["Model", "Setting", "LR", "Seeds", "ID mIoU", "OOD mIoU", "Δ", "ρ", "Boundary IoU ID", "Boundary IoU OOD"];
+  let h = `<thead><tr>${cols.map((c, i) => `<th class="${i < 2 ? "l" : ""}" style="cursor:default">${c}</th>`).join("")}</tr></thead><tbody>`;
+  for (const r of rows) h += `<tr><td class="l">${ES_MODEL_LABEL[r.model] || r.model}</td><td class="l">${ES_SETTING_LABEL[r.setting] || r.setting}</td>` +
+    `<td>${r.lr}</td><td>${r.seeds}</td><td>${pm(r.id_miou_mean, r.id_miou_std)}</td><td>${pm(r.ood_miou_mean, r.ood_miou_std)}</td>` +
+    `<td>${pm(r.delta_mean, r.delta_std)}</td><td>${pm(r.rho_mean, r.rho_std)}</td><td>${f1(r.id_boundary_iou_mean)}</td><td>${f1(r.ood_boundary_iou_mean)}</td></tr>`;
+  t.innerHTML = h + "</tbody>";
 }
 function marker(shape, cx, cy, r, color, ring) {
   const s = ring ? `stroke="var(--surface-1)" stroke-width="2"` : "";
