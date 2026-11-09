@@ -38,12 +38,7 @@ environments, so results from different people can be compared directly.
 | Crop classification | [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) | classifying crops on tropical islands, including an island never seen in training | mIoU over 8 classes | **Protocol agreed.** Data downloading; runner not written yet |
 | Phenology | – | – | – | Not started |
 
-Each task has a protocol in [`protocols/`](protocols/). A protocol follows the dataset paper exactly wherever the
-paper is specific, and marks every place where AgriBench had to decide something itself with **[AgriBench]**.
-
-PASTIS-R (crop classification in France) was retired on 2026-11-09. It is close to saturated and says little
-about generalisation, which PLANTEUR tests. Its code, features and pilot results are kept; see
-[docs/pastis-r.md](docs/pastis-r.md).
+Each task has a protocol in [`protocols/`](protocols/).
 
 ## Getting started
 
@@ -93,11 +88,11 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 | `s2` | raw Sentinel-2: 12 bands × 24 time steps over the season | 288 |
 | `s2-adm` | `s2` plus weather, soil, topography and coordinates (the paper's "S2 + ADM") | 488 |
 | `latlon` | the pixel's latitude and longitude: the simple control for the location encoders | 2 |
-| `mind` | [MIND](https://arxiv.org/abs/2609.25454) location encoder (Corley, …, Klemmer et al., 2026). Sees only the location. | 3072 |
-| `satclip` | [SatCLIP](https://arxiv.org/abs/2311.17179) location encoder (Klemmer et al.). Sees only the location. | 256 |
+| `mind` | [MIND](https://arxiv.org/abs/2609.25454) location encoder. Sees only the location. | 3072 |
+| `satclip` | [SatCLIP](https://arxiv.org/abs/2311.17179) location encoder. Sees only the location. | 256 |
 | `galileo` | [Galileo](https://github.com/nasaharvest/galileo)-Base embedding of the pixel's Sentinel-2 time series | 768 |
-| `aef` | [AlphaEarth Foundations](https://arxiv.org/abs/2507.22291) annual embedding (Google DeepMind) for the harvest year | 64 |
-| `tessera` | [TESSERA](https://arxiv.org/abs/2506.20380) annual embedding (Cambridge) for the harvest year | 128 |
+| `aef` | [AlphaEarth Foundations](https://arxiv.org/abs/2507.22291) annual embedding for the harvest year | 64 |
+| `tessera` | [TESSERA](https://arxiv.org/abs/2506.20380) annual embedding for the harvest year | 128 |
 
 A location encoder gives a pixel the same embedding every year, so on its own it can't follow year-to-year
 changes in yield. It is meant to be combined with an input that changes over time, such as `s2+mind`. How each
