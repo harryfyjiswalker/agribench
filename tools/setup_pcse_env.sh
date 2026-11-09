@@ -8,7 +8,7 @@ project=/lustre/shared/agriscience-benchmark
 base=$project/envs/benchmark-v2/bin/python
 venv=$project/envs/pcse
 PCSE_VERSION=6.0.13
-CROP_PARAMS_COMMIT=${CROP_PARAMS_COMMIT:-master}
+CROP_PARAMS_COMMIT=6a65d809ed8ca01f374af8e6156118902c566f45
 params=$project/upstream/wofost-crop-parameters
 [ -d "$venv" ] || "$base" -m venv "$venv"
 # benchmark-v2 is itself a venv, so --system-site-packages would not see its packages: link them with a .pth file.
