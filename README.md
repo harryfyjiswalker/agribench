@@ -25,10 +25,7 @@
 
 ### Out-Of-Distribution (PLANTEUR)
 
-- [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) (Wolters _et al._, 2026)
-  - Crop-type segmentation of 2,750 Sentinel-2/Sentinel-1/Landsat-8 patches (8 classes, 2018–2019) in
-    France's overseas territories, scored by mIoU-8 on the official spatial-block test split and on
-    leave-one-island-out over five territories. Protocol and download: [protocols/planteur.md](protocols/planteur.md).
+- [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) (Wolters _et al._, 2026): crop-type segmentation in France's overseas territories, scored by mIoU-8 with leave-one-island-out; protocol and download in [protocols/planteur.md](protocols/planteur.md).
 
 ## Yield Prediction
 
