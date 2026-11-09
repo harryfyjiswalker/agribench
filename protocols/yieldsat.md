@@ -237,6 +237,9 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `biophys` | LAI, FAPAR, FCOVER, canopy chlorophyll, canopy water (SNAP S2 biophysical processor) on days since sowing | AgriBench: physically based canopy variables |
 | `arc` | ARC retrieval: 15 crop-model parameters, peak LAI and the LAI trajectory on days since sowing | AgriBench, internal testing: physics-based season retrieval |
 | `arcvae` | 11 ARC crop-model parameters (canopy scaling and phenology timing), posterior mean and SD from ARC-VAE | AgriBench, internal testing: physics-guided season summary |
+| `weather-pheno` | 69 agronomic weather summaries per field in thermal-time crop-stage windows from sowing (GDD, heat, frost, rain, water balance) | AgriBench: year-level weather keyed to the crop calendar |
+| `wofost` | WOFOST 7.2 (PCSE) per field: potential and water-limited yield and biomass, max LAI, flowering and maturity, water stress (13) | AgriBench: process-based crop model |
+| `wofost-da`, `wofost-da-snap` | WOFOST 7.2 water-limited ensemble with field LAI assimilated by an EnKF (ARC or SNAP LAI), 12 | AgriBench: crop model + satellite hybrid |
 | combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
@@ -370,6 +373,51 @@ SHA-256 and the runner refuses a mismatch):
   calendar, so each observation's day of year is replaced by 120 + days since sowing (observations outside
   1–365 dropped), which makes the phenology outputs relative to sowing. Crops other than maize are outside its
   training distribution.
+- `weather-pheno/` (`tools/build_yieldsat_weather_pheno.py`) [AgriBench]: does year-level weather fix the poor
+  LOYO/LORO transfer of imagery? `s2-adm` holds weather only as calendar-month slots; this input summarises each
+  field's daily ERA5 file (`Raw/.../weather/`) in agronomic terms keyed to its sowing date. Crop stages come from
+  thermal time since sowing (the `s2-gdd` GDD definition), with one constant per crop for flowering and maturity
+  (wheat 1650/2400 °C·d at base 0 °C, maize 800/1500 and soybean 750/1650 at base 10 °C, rapeseed 850/1750 at
+  base 5 °C; literature ranges, chosen so maturity falls 1–3 weeks before each subset's median sowing-to-harvest
+  thermal time, a per-subset check, never a field's own harvest date). Windows: 60 days before sowing,
+  early and late vegetative, flowering (±10 % around the flowering constant), grain fill, whole season. Per window:
+  length, mean Tmean and Tmax, heat degree-days above a crop threshold on Tmax (wheat 32, maize and soybean 35,
+  rapeseed 29 °C), frost days (Tmin < 0 and < −5 °C), rainfall, Hargreaves ET0 (radiation exists only in Germany
+  and Uruguay, so every country uses Hargreaves), rainfall − ET0, longest dry spell and the water-stress index
+  1 − AET/ETc of a 150 mm bucket with FAO-56-style crop coefficients. Plus sowing day of year, days to flowering
+  and maturity, soil water at sowing and flowering, GDD in the first 30/60/90 days and the season's minimum Tmin.
+  **Leakage guard:** every weather file runs from 60 days before sowing to exactly 60 days after harvest (all
+  2,173 fields), so a field's record end would reveal its harvest date. The builder reads weather only up to
+  sowing + a cap that is one constant per subset (the shortest record in the subset: ARG-C 188, ARG-S 141, ARG-W
+  205, BRA-C 177, BRA-S 171, BRA-W 185, GER-R 368, GER-W 318, URG-S 183 days), so windows are truncated in the same
+  way for every field. Estimated maturity falls within the cap for every field except 33 % of ARG-S (where the
+  grain-fill window ends at the cap). Pixels of a field share its values.
+- `wofost/` (`tools/build_yieldsat_wofost.py`, shared set-up in `tools/yieldsat_wofost.py`) [AgriBench]: WOFOST
+  7.2 through PCSE 6.0.13 (layered venv `envs/pcse`, `tools/setup_pcse_env.sh`), potential (`Wofost72_PP`) and
+  water-limited (`Wofost72_WLP_CWB`) runs per field from sowing to maturity or the subset cap above. Weather: the
+  same ERA5 files and cap, radiation by Hargreaves, vapour pressure from Tmin, wind 2 m/s, E0/ES0/ET0 by PCSE's
+  Penman(-Monteith). Soil: the SoilGrids layers already in the v1 cache (the `s2-adm` static bands), field mean of
+  sand, clay, organic carbon and coarse fragments over 0–100 cm → wilting point, field capacity, saturation and
+  conductivity by Saxton & Rawls (2006); rooting depth 100 cm; root zone half full 60 days before sowing. Crop:
+  default WOFOST 7.2 parameter sets (ajwdewit/WOFOST_crop_parameters, branch `wofost72`, pinned): Winter_wheat_101,
+  Grain_maize_201, Soybean_901, Oilseed_rape_1001. These are European calibrations, so phenology is replaced by the
+  `weather-pheno` thermal-time constants (temperature-only development, IDSL = 0; DTSMTB linear from the crop's
+  base temperature to 30 °C; TSUM1 = flowering − TSUMEM, TSUM2 = maturity − flowering); all other crop parameters
+  stay default and nothing is calibrated on yield, so absolute yields are indicative and the features act as
+  relative, year-sensitive indices. 13 features: potential and water-limited grain yield, biomass and max LAI,
+  water-limited LAI at flowering and transpiration, their yield ratio, a transpiration-deficit water-stress index,
+  simulated days to flowering and maturity, and root-zone available water. Slurm array of 60-field chunks, about
+  1 s per field.
+- `wofost-da/`, `wofost-da-snap/` (`tools/build_yieldsat_wofost_da.py`) [AgriBench]: the classic crop-model +
+  satellite hybrid. WOFOST water-limited as `wofost`, as an ensemble of 32 members with perturbed LAI-related
+  parameters (TDWI × lognormal(0, 0.3); SPAN × N(1, 0.1); SLATB and AMAXTB × N(1, 0.15); TSUM1 × N(1, 0.05); initial
+  water × U(0.5, 1.5)), corrected by a stochastic ensemble Kalman filter on the LAI state (PCSE `set_variable`,
+  which rescales leaf biomass) at each observation of the field-median satellite LAI on the `s2-aligned` grid (days
+  1 to the cap, at least 5 valid pixels; observation SD max(0.3, 0.15 LAI)). LAI source: `arc` → `wofost-da`, SNAP
+  `biophys` → `wofost-da-snap`. 12 features: ensemble mean and SD of grain yield, mean biomass, max LAI, LAI at
+  flowering, transpiration, days to flowering and maturity, the number of observations assimilated, the mean and
+  mean absolute innovation (observed − forecast LAI) and the largest observed LAI. Per-field seeds make it
+  reproducible.
 
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
 
