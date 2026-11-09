@@ -5,7 +5,8 @@
 #   tools/publish_results.sh --no-merge # stop after opening the PR
 #
 # 1. On Anunna: runs tools.collect_yieldsat for every YieldSAT sweep (complete runs only; one small CPU job each)
-#    and tools.earthshift_results --csv for EarthShift (final runs so far, with their seed counts).
+#    and tools.earthshift_results --csv for EarthShift (final runs so far, with their seed counts). YieldSAT
+#    diagnostics (tools.yieldsat_diagnostics) run as a separate job; each publish ships the last finished output.
 # 2. Copies the aggregate CSVs into results/, rebuilds results/index.json, and opens a PR if anything changed.
 # Only aggregates are published (the repo is public): no field, tile or fold-level data.
 set -euo pipefail
@@ -41,6 +42,16 @@ if [ -f tools/earthshift_results.py ]; then es=$checkout; else
   git -C "$es" checkout -q --detach "$(git rev-parse FETCH_HEAD)"
 fi
 (cd "$es" && "$py" -m tools.earthshift_results --csv "$HOME/agribench-publish/earthshift/final.csv" >/dev/null) || echo "EarthShift export failed"
+# Diagnostics (bootstrap CIs, error decomposition, rank persistence; protocols/yieldsat.md 2.10) take a while, so
+# they run as their own job: publish the output of the last finished one and start a new one if none is queued.
+diag=$HOME/agribench-diagnostics
+mkdir -p "$diag" "$HOME/agribench-publish/yieldsat/diagnostics"
+cp "$diag"/*.csv "$HOME/agribench-publish/yieldsat/diagnostics/" 2>/dev/null || true
+if ! squeue --me -h -o %j | grep -q ys-diagnostics; then
+  args=(); for d in "$project"/runs/yieldsat/sweeps/*/; do s=$(basename "$d"); [[ $s == _* ]] || args+=(--sweep "$s"); done
+  sbatch --parsable --job-name=ys-diagnostics --time=02:00:00 --mem=16G --cpus-per-task=2 \
+    --output="$diag/diagnostics-%j.log" prepare.sbatch tools.yieldsat_diagnostics "${args[@]}" --out "$diag" >/dev/null
+fi
 ls -l "$HOME"/agribench-publish/*/
 REMOTE
 
@@ -48,7 +59,7 @@ stamp=$(date +%Y%m%d-%H%M)
 branch=results/auto-$stamp
 git checkout -q main && git pull -q
 git checkout -q -b "$branch"
-for ds in yieldsat earthshift; do
+for ds in yieldsat earthshift yieldsat/diagnostics; do
   mkdir -p results/$ds
   scp -q "$HOST:agribench-publish/$ds/*.csv" results/$ds/ 2>/dev/null || true
 done
@@ -59,7 +70,7 @@ now = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
 pathlib.Path("results/index.json").write_text(json.dumps({"updated": now, "files": [{"path": f} for f in files]}, indent=2) + "\n")
 PY
 git add results
-if git diff --cached --quiet -- results/*/*.csv; then
+if git diff --cached --quiet -- results/*/*.csv results/yieldsat/diagnostics; then
   echo "No new results since the last publish."; git checkout -q main; git branch -q -D "$branch"; exit 0
 fi
 git commit -q -m "Results: automatic publish $stamp (aggregates only, finished runs so far)
