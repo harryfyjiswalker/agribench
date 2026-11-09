@@ -217,6 +217,9 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `aef` | AlphaEarth Foundations annual embedding, 64-d | AgriBench |
 | `tessera` | TESSERA annual embedding, 128-d | AgriBench |
 | `s2-aligned` | 12 S2 bands interpolated onto a fixed grid of days since sowing (every 15 days) | AgriBench: season-aligned version of `s2` |
+| `s2-gdd` | 12 S2 bands interpolated onto a fixed grid of growing degree days since sowing | AgriBench: thermal-time version of `s2-aligned` |
+| `s2-harmonic` | per band, 5 harmonic-regression coefficients (2 harmonics) over days since sowing | AgriBench: compact gap-robust summary |
+| `biophys` | LAI, FAPAR, FCOVER, canopy chlorophyll, canopy water (SNAP S2 biophysical processor) on days since sowing | AgriBench: physically based canopy variables |
 | combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
@@ -265,6 +268,26 @@ SHA-256 and the runner refuses a mismatch):
   … days, up to the subset's 95th percentile of the last observation day (capped at 330). Grid points outside
   the pixel's observed range stay NaN. Only the sowing date is used, never the harvest date or yield. It is an
   extra input beside `s2`, not a replacement, so the paper's input is still reported as the paper defines it.
+- `s2-gdd/` (`tools/build_yieldsat_s2_gdd.py`) [AgriBench]: as `s2-aligned`, but the axis is growing degree days
+  since sowing, from each field's daily ERA5 file in `Raw/.../weather/`. Daily GDD = max(0, (clip(Tmax) +
+  clip(Tmin)) / 2 - Tbase), clipped to [Tbase, 30 °C], with Tbase 0 °C (wheat), 5 °C (rapeseed), 10 °C (corn,
+  soybean). The grid starts at -50 °C·d and has about 16 equal steps up to the subset's 95th percentile of the
+  last observation (steps of 125–225 °C·d). Motivation: crop development follows heat accumulation more closely
+  than the calendar (Nyborg et al. 2022, thermal positional encoding; Franch et al. 2026, GDD-normalised S2 yield
+  models; Osei et al. 2026 found days-after-planting slightly better than GDD with 1 km temperatures and a fixed
+  planting date). Every field's weather record covers its season.
+- `s2-harmonic/` (`tools/build_yieldsat_s2_harmonic.py`) [AgriBench]: per pixel and band, least-squares fit of
+  c0 + a1 cos + b1 sin + a2 cos + b2 sin (period 365 days, t = days since sowing), with a ridge penalty of 0.5
+  (in observations) on the harmonic terms; 60 features. A band needs 5 valid observations, otherwise NaN
+  (77–98% of pixels fitted, lowest in GER-W). On simulated noisy seasons the ridge makes the coefficients 2–4×
+  more stable than plain least squares at a small cost in fit.
+- `biophys/` (`tools/build_yieldsat_biophys.py`) [AgriBench]: each observation converted to LAI, FAPAR, FCOVER,
+  CCC and CWC with the ESA SNAP Sentinel-2 Toolbox biophysical networks (s2tbx 3.0 "S2A" coefficients, GPL-3.0,
+  pinned commit, downloaded to `upstream/snap-biophysical/`), then placed on the `s2-aligned` grid. The
+  implementation matches SNAP's own test cases (max error 3e-4 for LAI). YieldSAT has no acquisition geometry,
+  so the sun angles are computed for 10:30 local solar time, the view zenith is set to 5° and the relative
+  azimuth to 90°. This is the operational BVNET baseline; PROSAIL-VAE (Zérah et al. 2024; De Sousa & Inglada
+  2026) would be the physics-guided successor, but its trained weights are not published.
 
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
 
