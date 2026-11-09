@@ -132,7 +132,7 @@ def main():
             r, c = prow[a:b] - prow[a:b].min(), pcol[a:b] - pcol[a:b].min()
             H, W = int(np.ceil((r.max() + 1) / TILE) * TILE), int(np.ceil((c.max() + 1) / TILE) * TILE)
             T = len(slots)
-            grid = np.broadcast_to(series.mean(0).T[:, :, None, None], (T, len(BANDS), H, W)).copy()
+            grid = np.broadcast_to(series.mean(0)[:, :, None, None], (T, len(BANDS), H, W)).copy()
             grid[:, :, r, c] = series.transpose(1, 2, 0)
             tiles = grid.reshape(T, len(BANDS), H // TILE, TILE, W // TILE, TILE).transpose(2, 4, 0, 1, 3, 5)
             ty, tx = tiles.shape[:2]
