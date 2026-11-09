@@ -1,10 +1,5 @@
 # AgriBench
 
-AgriBench is the AIN group's shared benchmark for agricultural remote sensing. It answers one question
-repeatably: **how good is this input, with this model, on this task?**
-
-You choose three things:
-
 - a **dataset** (a task, such as yield prediction or crop classification);
 - an **input**: what the model sees for each pixel. This can be raw Sentinel-2 data, a location encoder's
   embedding, or a geospatial foundation model's embedding;
@@ -18,7 +13,7 @@ environments, so results from different people can be compared directly.
 
 ## Contents
 
-- [Tasks at a glance](#tasks-at-a-glance)
+- [Tasks](#tasks-at-a-glance)
 - [Getting started](#getting-started)
 - [YieldSAT: yield prediction](#yieldsat-yield-prediction)
 - [EarthShift: field delineation under shift](#earthshift-field-delineation-under-shift)
