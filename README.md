@@ -46,7 +46,7 @@ Replace `USERNAME` with your WUR username (off campus you may need the WUR VPN).
 ## 2. Get the code
 
     mkdir -p ~/projects && cd ~/projects
-    git clone https://github.com/harryfyjiswalker/agribench.git
+    git clone --recurse-submodules https://github.com/harryfyjiswalker/agribench.git
     cd agribench
     export project=/lustre/shared/agriscience-benchmark    # shared files; set again in each new session
 
@@ -137,3 +137,26 @@ next versioned environment. Your own copy:
 
 Only `pilot` runs can be exported (not smoke runs). The leaderboard above rebuilds automatically after the push.
 Without push access, fork the repo and open a pull request.
+
+## 9. Working with an AI agent (Claude Code and others)
+
+The repo includes the [Anunna skill](https://git.wur.nl/anunna/anunna-skill) as a git submodule at
+`.claude/skills/anunna`. It teaches the agent how to use the cluster: ssh, Slurm, Lustre, environments and job
+costs. Claude Code picks it up automatically when you open this repo. If you cloned without
+`--recurse-submodules`, fetch it with:
+
+    git submodule update --init
+
+Update it to the latest version (then commit the new pointer):
+
+    git submodule update --remote .claude/skills/anunna
+
+For an agent on your laptop to reach Anunna, add connection sharing to the `Host anunna` block in
+`~/.ssh/config`. The agent then reuses a login you opened yourself and needs no key of its own (see
+`.claude/skills/anunna/references/windows-and-agents.md`):
+
+    ControlMaster auto
+    ControlPath ~/.ssh/cm-%r@%h-%p
+    ControlPersist 8h
+
+Open the connection with `ssh -fN anunna` before starting the agent, and close it with `ssh -O exit anunna`.
