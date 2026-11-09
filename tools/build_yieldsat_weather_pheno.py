@@ -53,14 +53,15 @@ import pandas as pd
 from tools import yieldsat as ys
 from tools.build_yieldsat_s2_gdd import BASE_CAP
 
-# Thermal time (°C·d since sowing, base temperatures of BASE_CAP) at flowering and physiological maturity.
-# Approximate literature values for mid-season cultivars: wheat anthesis ~1500 and maturity ~2300 (base 0 °C, no
-# vernalisation or photoperiod term); maize silking ~800, black layer ~1500 (base 10 °C); soybean R2 ~700, R7 ~1500
-# (base 10 °C); winter oilseed rape flowering ~850, maturity ~1700 (base 5 °C). Sowing-to-harvest thermal time in
-# YieldSAT is about 300-500 °C·d above these maturity values in every subset (harvest follows dry-down), which is the
-# expected order; it is a check only, harvest dates are not used.
-TT_FLOWER = {"wheat": 1500.0, "corn": 800.0, "soybean": 700.0, "rapeseed": 850.0}
-TT_MATURITY = {"wheat": 2300.0, "corn": 1500.0, "soybean": 1500.0, "rapeseed": 1700.0}
+# Thermal time (°C·d since sowing, base temperatures of BASE_CAP) at flowering and physiological maturity, one
+# constant per crop. Literature values for mid-season cultivars (wheat anthesis ~1500-1700 and maturity ~2300-2500
+# at base 0 °C; maize silking ~800 and black layer ~1500 at base 10 °C; soybean R2 ~700-800 and R7 ~1600-1700 at
+# base 10 °C; winter oilseed rape flowering ~850 and maturity ~1700-1800 at base 5 °C), picked within those ranges
+# so that maturity falls 100-400 °C·d (1-3 weeks) before the median sowing-to-harvest thermal time of every subset of
+# the crop. That check uses one median per subset, never a field's own harvest date. No vernalisation or photoperiod
+# term: winter wheat accumulates base-0 thermal time over winter, which the higher wheat constants absorb.
+TT_FLOWER = {"wheat": 1650.0, "corn": 800.0, "soybean": 750.0, "rapeseed": 850.0}
+TT_MATURITY = {"wheat": 2400.0, "corn": 1500.0, "soybean": 1650.0, "rapeseed": 1750.0}
 # Heat-stress thresholds on daily Tmax (°C) around flowering (Porter & Gawith 1999; Schlenker & Roberts 2009;
 # Siebers et al. 2015; Morrison & Stewart 2002 for rapeseed).
 T_HEAT = {"wheat": 32.0, "corn": 35.0, "soybean": 35.0, "rapeseed": 29.0}
@@ -108,7 +109,7 @@ def daily_weather(field, country, lat, first, last):
     for name, col in (("tmax", "Temp_max"), ("tmin", "Temp_min"), ("tmean", "Temp_mean")):
         out[name] = w[col].interpolate(limit_direction="both") - 273.15
     out["prec"] = (w["Total_prec"].fillna(0).clip(lower=0) * 1000.0)
-    out["ra"] = extraterrestrial_radiation(lat, days.dayofyear.to_numpy())
+    out["ra"] = extraterrestrial_radiation(lat, days.day_of_year.to_numpy())
     dtr = (out.tmax - out.tmin).clip(lower=0)
     out["rs"] = 0.16 * np.sqrt(dtr) * out.ra                     # Hargreaves radiation estimate (FAO-56 eq. 50)
     out["et0"] = (0.0023 * (out.tmean + 17.8) * np.sqrt(dtr) * out.ra * 0.408).clip(lower=0)  # FAO-56 eq. 52
