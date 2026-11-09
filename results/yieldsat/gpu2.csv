@@ -1,0 +1,2 @@
+dataset,subset,scheme,input,model,folds,n_features,pixel_cap,pixel_r2_mean,pixel_r2_std,pixel_rmse_mean,pixel_rmse_std,field_r2_mean,field_r2_std,field_rmse_mean,field_rmse_std,pooled_pixel_r2,pooled_pixel_rmse,pooled_field_r2,pooled_field_rmse,task_hours,git_commit,sweep
+yieldsat,ARG-C,cv10,s2,tabicl,10,288,32,0.4776,0.1792,2.5478,0.2857,0.6914,0.1039,1.4591,0.2862,0.5235,2.5691,0.7174,1.4917,0.07,791e71f759,gpu2
