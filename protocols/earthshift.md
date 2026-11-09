@@ -1,7 +1,7 @@
 # EarthShift field-delineation evaluation protocol
 
-Status: **agreed 2026-11-09 (section 5). Core data downloaded and verified on Anunna; input cache and training
-not built yet.** This page sets
+Status: **agreed 2026-11-09 (section 5). Data downloaded and verified, split files frozen and input cache built
+on Anunna (2026-11-09); the training and evaluation code is not written yet.** This page sets
 how AgriBench scores a model on EarthShift's field-delineation tasks, so results are comparable with the
 paper and with each other. Sections marked **[paper]** follow Doerksen and Kerner (2026) or their released
 code exactly. Sections marked **[AgriBench]** fill gaps the paper leaves open or go beyond it.
@@ -65,11 +65,15 @@ south_africa 0.61 / 3,737.
   read-only data as archives (`.claude/skills/anunna/references/file-counts.md`). Each chip is a separately
   compressed entry, so any chip can be read without unpacking the rest: `zipfile.ZipFile(z).open(name)` or
   `rasterio.open("/vsizip/<zip>/<inner path>")`. Decompressing one chip takes milliseconds.
-- **Nothing unzips per run.** `tools/build_earthshift_inputs.py` (still to write) reads the zips once and
-  writes, per country, one uncompressed array file with every sample the split files use. Images are kept as
-  uint16 `(N, 4, 256, 256)`, masks as uint8 `(N, 256, 256)`, with an index of `aoi_id` and window. They go
-  to `$project/inputs/earthshift/<country>.npz`. Training jobs memory-map or load them into RAM: a few
-  large sequential reads, which is the fastest pattern on Lustre.
+- **Nothing unzips per run.** `tools/build_earthshift_inputs.py` reads the zips once and writes, per
+  country, every sample the split files use outside the gaps, to `$project/inputs/earthshift/v1/`:
+  - `<country>-images.npy`: uint16 `(N, 4, 256, 256)`, bands R, G, B, NIR, reflectance × 10,000;
+  - `<country>-masks.npy`: uint8 `(N, 256, 256)`;
+  - `<country>-index.csv`: row, `aoi_id`, window;
+  - `<country>.json`: shapes, label pixel counts, zip and split hashes.
+
+  Training jobs memory-map the arrays or load them into RAM: a few large sequential reads, which is the
+  fastest pattern on Lustre. Run it as `sbatch prepare.sbatch tools.build_earthshift_inputs`.
 - **The cache is small**, because only the samples the tasks use are kept: all used Germany chips, the
   Cambodia and Denmark test chips, and the used South Africa chips. That's about 2,600 images, roughly
   1.5 GB in 4 files. Denmark's 2.9 GB zip shrinks to about 0.4 GB, because only its 332 test chips are
@@ -368,11 +372,14 @@ Expect AgriBench's Galileo numbers to differ from the paper's.
 
 ### 2.6 Splits, seeds and provenance [AgriBench]
 
-- **Frozen split files.** `tools/make_earthshift_splits.py` (still to write) reads the four
+- **Frozen split files.** `tools/make_earthshift_splits.py` (`sbatch prepare.sbatch tools.make_earthshift_splits`;
+  `--check` rebuilds them in memory and compares) reads the four
   `chips_<country>.parquet` files from inside the zips. It writes one file per task to
   `/lustre/shared/agriscience-benchmark/splits/earthshift/<task>.csv`, with columns
   `country, aoi_id, window, role` (role = train / val / id_test / ood_test / gap). It applies the rules in
   2.1b, keeps only samples whose image and label exist, as the code does, and refuses to overwrite.
+  Beside the task files it writes `chips.csv` (every chip: FTW split, grid, Germany band, which files exist)
+  and `manifest.json` (SHA-256 of every file, of the four zips and of the code).
 - **It checks the rule** before writing: no `aoi_id` in two roles, and no train, val or ID-test chip within
   50 m of a chip of another of those roles (footprints from the parquet, in UTM). It stops if either check
   fails, and prints the counts in 2.1b.
