@@ -168,12 +168,16 @@ function renderChart(rows, metric) {
   const svg = document.getElementById("chart");
   const heads = HEAD_ORDER.filter(m => m !== "mean" && rows.some(r => r.model === m)).slice(0, 4);
   const inputs = [...new Set(rows.map(r => r.input))];
-  // Only subsets every shown head has, so means are comparable across heads.
-  const subsets = [...new Set(rows.map(r => r.subset))].filter(s =>
-    inputs.every(i => heads.every(h => !rows.some(r => r.input === i && r.model === h) || rows.some(r => r.input === i && r.model === h && r.subset === s))));
+  // Per input: only the subsets every head with results for that input has, so heads compare on equal terms.
+  const allSubsets = [...new Set(rows.map(r => r.subset))];
+  const subsetsOf = {};
+  for (const i of inputs) {
+    const hs = heads.filter(h => rows.some(r => r.input === i && r.model === h));
+    subsetsOf[i] = allSubsets.filter(s => hs.every(h => rows.some(r => r.input === i && r.model === h && r.subset === s)));
+  }
   const pts = [];
   for (const i of inputs) for (const h of heads) {
-    const rs = rows.filter(r => r.input === i && r.model === h && subsets.includes(r.subset));
+    const rs = rows.filter(r => r.input === i && r.model === h && subsetsOf[i].includes(r.subset));
     if (rs.length) pts.push({input: i, head: h, v: mean(rs.map(r => r[metric + "_mean"])), n: rs.length,
       lo: Math.min(...rs.map(r => r[metric + "_mean"])), hi: Math.max(...rs.map(r => r[metric + "_mean"]))});
   }
@@ -195,7 +199,7 @@ function renderChart(rows, metric) {
   inputs.forEach((i, r) => {
     const y = T + r * rowH + rowH / 2;
     g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--grid)" stroke-width="1" stroke-dasharray="2 4"/>`;
-    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${label(i)}</text>`;
+    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${label(i)}${subsetsOf[i].length < allSubsets.length ? ` <tspan style="fill:var(--text-muted)">(${subsetsOf[i].length}/${allSubsets.length})</tspan>` : ""}</text>`;
     heads.forEach((h, k) => {
       const p = pts.find(q => q.input === i && q.head === h); if (!p) return;
       const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${p.n} subsets: ${fmt(metric, p.v)}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}`;
@@ -205,7 +209,7 @@ function renderChart(rows, metric) {
   });
   svg.innerHTML = g;
   document.getElementById("chart-note").textContent =
-    `Mean of the per-subset scores over ${subsets.length} subset${subsets.length === 1 ? "" : "s"} that every shown head has. Hover a marker for the spread across subsets.`;
+    `Mean of the per-subset scores. For each input, only subsets that every shown head has are used; (k/${allSubsets.length}) marks an input with results on k subsets so far. Hover a marker for the spread across subsets.`;
   svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
 }
 function marker(shape, cx, cy, r, color, ring) {
