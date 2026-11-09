@@ -220,6 +220,7 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `s2-gdd` | 12 S2 bands interpolated onto a fixed grid of growing degree days since sowing | AgriBench: thermal-time version of `s2-aligned` |
 | `s2-harmonic` | per band, 5 harmonic-regression coefficients (2 harmonics) over days since sowing | AgriBench: compact gap-robust summary |
 | `biophys` | LAI, FAPAR, FCOVER, canopy chlorophyll, canopy water (SNAP S2 biophysical processor) on days since sowing | AgriBench: physically based canopy variables |
+| `arcvae` | 11 ARC crop-model parameters (canopy scaling and phenology timing), posterior mean and SD from ARC-VAE | AgriBench, internal testing: physics-guided season summary |
 | combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
@@ -287,7 +288,16 @@ SHA-256 and the runner refuses a mismatch):
   implementation matches SNAP's own test cases (max error 3e-4 for LAI). YieldSAT has no acquisition geometry,
   so the sun angles are computed for 10:30 local solar time, the view zenith is set to 5° and the relative
   azimuth to 90°. This is the operational BVNET baseline; PROSAIL-VAE (Zérah et al. 2024; De Sousa & Inglada
-  2026) would be the physics-guided successor, but its trained weights are not published.
+  2026) would be the physics-guided successor. A Transformer-PROSAILVAE checkpoint is public, but the code for
+  its latent head is not, and our reconstruction did not recover simulated LAI (R² 0.05), so it is not used.
+- `arcvae/` (`tools/build_yieldsat_arcvae.py`) [AgriBench, internal testing]: the encoder of ARC-VAE
+  (harryfyjiswalker/arc-vae, GPL-3.0, maize checkpoint), a transformer VAE trained on synthetic Sentinel-2
+  seasons from the ARC archetype crop model. Each pixel's whole season goes in, and the posterior mean and SD of
+  11 ARC parameters come out (N, Cab, Cm, Cw, LAI, ALA, Cbrown scaling; growth speed, start, senescence speed,
+  end): 22 features. Same geometry approximation as `biophys`. The model expects a northern-hemisphere maize
+  calendar, so each observation's day of year is replaced by 120 + days since sowing (observations outside
+  1–365 dropped), which makes the phenology outputs relative to sowing. Crops other than maize are outside its
+  training distribution.
 
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
 
