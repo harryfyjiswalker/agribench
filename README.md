@@ -17,13 +17,6 @@ people are directly comparable.
 | Field delineation | [EarthShift](https://earthshift.github.io/) (location and temporal shift tasks) | in- and out-of-distribution mIoU | splits and inputs built; training code under review, learning-rate sweeps running | [protocols/earthshift.md](protocols/earthshift.md) |
 | Phenology | – | – | not started | – |
 
-PASTIS-R (in-distribution crop classification in France) was retired on 2026-11-09: it is close to saturated and
-says little about generalisation, which PLANTEUR tests. Its code, features and pilot results are kept; see
-[docs/pastis-r.md](docs/pastis-r.md).
-
-Every protocol follows the dataset paper exactly where the paper is specific, and marks where AgriBench had to
-decide something itself.
-
 ## Quick start
 
     ssh USERNAME@login.anunna.wur.nl          # WUR username; off campus you may need the VPN; needs the AIN group
@@ -57,11 +50,11 @@ is for light work only: anything heavy goes through `sbatch`.
 | `s2` | raw Sentinel-2: 12 bands × 24 time steps | 288 |
 | `s2-adm` | `s2` plus weather, soil, topography and coordinates (the paper's "S2 + ADM") | 488 |
 | `latlon` | the pixel's latitude and longitude: the plain control for the location encoders | 2 |
-| `mind` | [MIND](https://arxiv.org/abs/2609.25454) location encoder (Corley, …, Klemmer et al., 2026); location only | 3072 |
-| `satclip` | [SatCLIP](https://arxiv.org/abs/2311.17179) location encoder (Klemmer et al.); location only | 256 |
+| `mind` | [MIND](https://arxiv.org/abs/2609.25454) location encoder; location only | 3072 |
+| `satclip` | [SatCLIP](https://arxiv.org/abs/2311.17179) location encoder; location only | 256 |
 | `galileo` | [Galileo](https://github.com/nasaharvest/galileo)-Base embedding of the pixel's Sentinel-2 series | 768 |
-| `aef` | [AlphaEarth Foundations](https://arxiv.org/abs/2507.22291) annual embedding (Google DeepMind) for the harvest year | 64 |
-| `tessera` | [TESSERA](https://arxiv.org/abs/2506.20380) annual embedding (Cambridge) for the harvest year | 128 |
+| `aef` | [AlphaEarth Foundations](https://arxiv.org/abs/2507.22291) annual embedding for the harvest year | 64 |
+| `tessera` | [TESSERA](https://arxiv.org/abs/2506.20380) annual embeddin for the harvest year | 128 |
 
 Location encoders give the same embedding in every year, so on their own they can't follow year-to-year yield
 changes; combine them with a time-varying input. How each input was built and checked: protocol section 2.5.
