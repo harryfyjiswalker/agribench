@@ -14,7 +14,9 @@ from sklearn.metrics import mean_squared_error, r2_score
 LEVELS = ("pixel", "field")
 METRICS = [f"{lvl}_{m}" for lvl in LEVELS for m in ("r2", "rmse")]
 # Keys that must agree between the folds of one run.
-RUN_KEYS = ("dataset", "label", "scheme", "input", "model", "split", "smoke", "seed", "pixel_cap", "folds_in_scheme")
+RUN_KEYS = ("dataset", "label", "scheme", "input", "model", "split", "smoke", "seed", "pixel_cap", "folds_in_scheme",
+            "season_cutoff", "train_fraction")  # the last two are absent (None / 1.0) in older fold files
+DEFAULTS = {"season_cutoff": None, "train_fraction": 1.0}
 
 
 def score(y, p):
@@ -53,7 +55,7 @@ def combine(out, require_complete=True):
     first = folds[0]
     for f in folds[1:]:
         for key in RUN_KEYS:
-            if f[key] != first[key]:
+            if f.get(key, DEFAULTS.get(key)) != first.get(key, DEFAULTS.get(key)):
                 raise ValueError(f"{out}: folds disagree on {key}")
         if f["provenance"]["fold_file_sha256"] != first["provenance"]["fold_file_sha256"]:
             raise ValueError(f"{out}: folds come from different fold files")
@@ -72,7 +74,7 @@ def combine(out, require_complete=True):
         pd.concat([pd.read_csv(t) for t in tuning]).to_csv(out / "tuning.csv", index=False)
     df = pd.DataFrame(per_fold)
     summary = {c: {"mean": float(df[c].mean()), "std": float(df[c].std(ddof=0))} for c in METRICS}
-    result = {**{k: first[k] for k in RUN_KEYS}, "folds": len(per_fold), "summary": summary,
+    result = {**{k: first.get(k, DEFAULTS.get(k)) for k in RUN_KEYS}, "folds": len(per_fold), "summary": summary,
               "pooled": score_levels(preds["y"], preds["p"], preds["field"]), "per_fold": per_fold,
               "cost": {"task_seconds": float(df.seconds.sum()), "max_peak_rss_gb": float(df.get("peak_rss_gb", pd.Series([np.nan])).max())},
               "provenance": first["provenance"] | {"slurm_jobs": sorted({str(f["provenance"].get("slurm_job")) for f in folds})}}

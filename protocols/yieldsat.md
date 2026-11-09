@@ -188,6 +188,17 @@ without domain adaptation, which is exactly why it's the most informative test f
   - Yield levels differ by country (Fig. 4 of the paper).
   - The input includes coordinates, which point outside the training range for a new country.
   - Data quality differs a lot. Argentina is 93% "good"; Uruguay and Brazil are mostly "average" or "bad".
+- **How it is run (from 2026-11-09).**
+  - `python -m tools.sweep_yieldsat --name loco1 --schemes loco --inputs ... --models ...` plans one run per
+    crop × input × head under `<sweep>/<crop>/loco/<input>/<head>/`, adds `experiment.confirm_test=true`, and
+    accepts `--resource-scale 2`, since training sets pool countries.
+  - We run LOCO for **every** input and head in the development tables, not a shortlist. All of them are
+    reported, so no LOCO number is picked after the fact, and the ledger still logs every run.
+  - Inputs on a per-subset time grid (s2-aligned, s2-gdd, biophys, ARC) have different columns per country,
+    e.g. German wheat's season is longer. LOCO keeps only the columns that every country of the crop shares, by
+    name (the common days after sowing). `n_features` in the provenance records the width actually used.
+  - The aggregate table has one row per crop (pooled over held-out countries) and one per held-out country,
+    labelled `<crop>><COUNTRY>`, e.g. `wheat>GER`.
 
 ### 2.4 Metrics [paper]
 
@@ -393,6 +404,52 @@ The leaderboard has:
   training-mean baseline as a reference row;
 - one table per development scheme (CV10, LOYO, LORO), with the nine subsets as columns, laid out like the
   paper's Tables 13–18.
+
+### 2.10 Uncertainty, error decomposition and rank persistence [AgriBench]
+
+`python -m tools.yieldsat_diagnostics --sweep <name>` works from the saved predictions, so it needs no reruns. It
+works at field level (pixel predictions averaged per field) and writes `results/yieldsat/diagnostics/<sweep>-*.csv`.
+
+- **Bootstrap intervals (`-ci.csv`).** Pooled field R² and RMSE, with 95% percentile intervals from 1,000
+  resamples of test fields within each held-out fold. Two configurations whose intervals overlap heavily are
+  not ranked against each other in the write-up.
+- **Error decomposition per held-out group (`-decomp.csv`).** The group is the year (LOYO), region (LORO, by
+  fold number) or country (LOCO). The mean squared deviation is split following Kobayashi & Salam (2000),
+  normalised by the group's yield variance (population SDs):
+  - b = (mean ŷ − mean y) / s_y, κ = s_ŷ / s_y, and r is the within-group Pearson correlation.
+  - 1 − R² = B + V + A, where B = b² (level bias), V = (κ − 1)² (spread mismatch) and A = 2κ(1 − r)
+    (lack of correlation).
+  - Also reported: MBE in t/ha, the shares of B, V and A, and R² after removing the group's mean bias
+    (= 1 − V − A).
+  - The bias-removed R² is a diagnostic only, never a score: in deployment the held-out year's mean is unknown.
+    It says whether a model ranks fields within a year correctly but misses the year's level (B dominates),
+    which points to a missing year-level signal (weather, management) rather than poor field-level features.
+  - The same decomposition of the pooled predictions is reported as group `pooled`.
+- **Rank persistence (`-ranks.csv`).** Within each subset × scheme, every input × head is ranked by its R² in
+  each held-out group. We report the mean rank, the rank variance across groups, and the worst-group R². A
+  representation that is best on average but has a high rank variance is not a dependable choice.
+
+### 2.11 Early season and label efficiency [AgriBench]
+
+Both are variants of a normal run, selected with `tools.sweep_yieldsat` options. They get their own run
+directories (`<input>@d060`, `<input>@f0.10-s1`) and extra columns in the aggregate table (`season_cutoff`, or
+`train_fraction` and `seed`). The dashboard keeps them out of the main comparison.
+
+- **Early season (`--season-cutoffs 30 60 90 120 150`).**
+  - Only columns at or before the cutoff, in days after sowing, are used. For the full season, see the
+    normal runs, which go to day +210.
+  - This needs an input whose columns are all indexed by days after sowing: s2-aligned (raw S2 on the sowing
+    grid) and biophys.
+  - Inputs computed from the whole season cannot be truncated after the fact. These are the annual
+    embeddings (AEF, TESSERA), Galileo, and ARC and ARC-VAE (fitted on the full season). They need
+    re-encoding on truncated time series, which is listed as a follow-up for the foundation-model runs.
+- **Label efficiency (`--train-fractions 0.05 0.1 0.25 0.5 --seeds 0 1 2`).**
+  - In each outer fold, a random subset of that fraction of the training fields is kept, with at least 10.
+    The test fold is unchanged.
+  - The subset is drawn from its own random stream (seed, fold), so it is the same for every input and head.
+  - Three seeds per fraction give the spread caused by which fields happen to be labelled.
+  - This is run on CV10 first (LOYO to follow). The question is how quickly a representation reaches its full-data score:
+    a good foundation representation should need fewer labelled fields.
 
 ---
 
