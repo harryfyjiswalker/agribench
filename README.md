@@ -86,6 +86,7 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 | `s2-gdd` | like `s2-aligned`, but the time axis is growing degree days (accumulated heat) since sowing, from each field's daily weather | ~200 (varies) |
 | `s2-harmonic` | each band's season summarised by a smooth curve (5 harmonic-regression coefficients per band); robust to cloud gaps | 60 |
 | `biophys` | canopy variables per date (leaf area index, FAPAR, ground cover, canopy chlorophyll and water) from ESA SNAP's biophysical processor, on the `s2-aligned` grid | ~85 |
+| `arc` | ARC retrieval per pixel (crop-model parameters, peak LAI and the LAI curve since sowing), after Whittaker outlier removal; internal testing | ~40 |
 | `arcvae` | ARC crop-model parameters per pixel (canopy scaling and phenology timing, mean and uncertainty) from the ARC-VAE encoder; internal testing | 22 |
 | `latlon` | the pixel's latitude and longitude: the simple control for the location encoders | 2 |
 | `mind` | [MIND](https://arxiv.org/abs/2609.25454) location encoder. Sees only the location. | 3072 |

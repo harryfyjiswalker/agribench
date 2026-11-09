@@ -220,6 +220,7 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `s2-gdd` | 12 S2 bands interpolated onto a fixed grid of growing degree days since sowing | AgriBench: thermal-time version of `s2-aligned` |
 | `s2-harmonic` | per band, 5 harmonic-regression coefficients (2 harmonics) over days since sowing | AgriBench: compact gap-robust summary |
 | `biophys` | LAI, FAPAR, FCOVER, canopy chlorophyll, canopy water (SNAP S2 biophysical processor) on days since sowing | AgriBench: physically based canopy variables |
+| `arc` | ARC retrieval: 15 crop-model parameters, peak LAI and the LAI trajectory on days since sowing | AgriBench, internal testing: physics-based season retrieval |
 | `arcvae` | 11 ARC crop-model parameters (canopy scaling and phenology timing), posterior mean and SD from ARC-VAE | AgriBench, internal testing: physics-guided season summary |
 | combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
@@ -290,6 +291,17 @@ SHA-256 and the runner refuses a mismatch):
   azimuth to 90°. This is the operational BVNET baseline; PROSAIL-VAE (Zérah et al. 2024; De Sousa & Inglada
   2026) would be the physics-guided successor. A Transformer-PROSAILVAE checkpoint is public, but the code for
   its latent head is not, and our reconstruction did not recover simulated LAI (R² 0.05), so it is not used.
+- `arc/` (`tools/build_yieldsat_arc.py`) [AgriBench, internal testing]: ARC retrieval (MarcYin/ARC, pinned
+  commit, no licence) following the AgriBench author's county-level ARC pipeline, adapted to pixels. Per field:
+  Whittaker IRLS outlier removal on B03, B8A and B11 (d = 2, 3 iterations, Tukey bisquare, lambda by V-curve over
+  10–1000, median of the three bands). The cleaned observations are then interpolated onto the `s2-aligned` grid,
+  and ARC sees day of year = 30 + days since sowing, so one reference library (2^17 simulated seasons) and one
+  nearest-neighbour index serve a whole subset; the original pipeline built both per county-year. Start of season
+  and season length come from the subset's median EVI2 curve (threshold 0.5). Retrieval: k = 300 neighbours, then
+  ARC's assimilation (best 50, inverse-distance weights), band uncertainty 5%. Features: 7 canopy, 4 phenology and 4
+  soil parameters, peak LAI and LAI per grid step. Archetypes: corn → maize, soybean → soybean, wheat → wheat,
+  rapeseed → wheat (ARC has no rapeseed archetype). Same geometry approximation as `biophys`, with the sun angle
+  for the subset's median latitude and sowing date. About 3 min per 100k pixels on 8 CPUs.
 - `arcvae/` (`tools/build_yieldsat_arcvae.py`) [AgriBench, internal testing]: the encoder of ARC-VAE
   (harryfyjiswalker/arc-vae, GPL-3.0, maize checkpoint), a transformer VAE trained on synthetic Sentinel-2
   seasons from the ARC archetype crop model. Each pixel's whole season goes in, and the posterior mean and SD of
