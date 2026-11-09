@@ -28,6 +28,9 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import warnings
+
+warnings.filterwarnings("ignore", message="The epoch parameter in `scheduler.step()`")  # raised inside SequentialLR
 
 from tools import earthshift as es
 
@@ -304,7 +307,7 @@ def train_one(args, model_name, setting, lr, seed, train, val, tests, device):
                     logits = model(x, months_all[mb])
                     loss = loss_fn(logits.float(), m_all[mb].long()) * len(mb) / len(batch)
                 loss.backward()
-                total += float(loss) * len(batch)
+                total += float(loss.detach()) * len(batch)
             opt.step()
             sched.step()
         if epoch == 0 or (epoch + 1) % 10 == 0 or epoch + 1 == epochs:
