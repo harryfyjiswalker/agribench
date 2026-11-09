@@ -127,7 +127,6 @@ def weather_provider(w, lat, lon, elev):
                                            TMAX=float(r.tmax), VAP=float(vap), RAIN=float(r.prec) / 10.0,
                                            E0=e0 / 10.0, ES0=es0 / 10.0, ET0=et0 / 10.0, WIND=WIND_MS)
                 self._store_WeatherDataContainer(wdc, day)
-            self.first_date, self.last_date = w.index[0].date(), w.index[-1].date()
 
     return Provider()
 
