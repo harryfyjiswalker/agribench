@@ -4,7 +4,8 @@
     python -m tools.sweep_yieldsat --name phase1 ... --dry-run      # print the plan and cost estimate only
 
 Every (subset, scheme, input, model) combination writes to runs/yieldsat/sweeps/<name>/<subset>/<scheme>/<input>/
-<model>/. CPU heads run one array task per outer fold, so the folds of a run execute in parallel; GPU heads (TabPFN,
+<model>/. Scheme loco (leave one country out, protocol 2.3b) is planned per crop instead of per subset
+(<name>/<crop>/loco/<input>/<model>/) and runs with experiment.confirm_test=true; pass --schemes loco alone. CPU heads run one array task per outer fold, so the folds of a run execute in parallel; GPU heads (TabPFN,
 TabICL) run all folds of a run in one task, so each GPU job loads the model once. Tasks whose result already exists
 are skipped, so re-running the same command resumes a sweep. At most --max-running tasks of the sweep run at once (split evenly over its arrays)
 (Anunna guidance: keep Lustre-heavy arrays at about 200). A final CPU job (afterany) combines the folds of every
@@ -29,7 +30,7 @@ import pandas as pd
 from tools import yieldsat as ys
 
 SLURM = "/cm/shared/apps/slurm/current/bin"
-SCHEMES = ("cv10", "loyo", "loro")
+SCHEMES = ("cv10", "loyo", "loro", "loco")
 # Measured on 2026-11-09 (see protocols/yieldsat.md 2.9); "wide" applies when the input has > 600 columns.
 RESOURCES = {
     "mean":     {"gpu": False, "per": "run",  "cpus": 1, "mem": "8G",  "wide_mem": "8G",  "time": "00:20:00"},
@@ -41,6 +42,16 @@ RESOURCES = {
     "tabpfn":   {"gpu": True,  "per": "run",  "cpus": 4, "mem": "48G", "wide_mem": "64G", "time": "04:00:00"},
     "tabicl":   {"gpu": True,  "per": "run",  "cpus": 4, "mem": "48G", "wide_mem": "64G", "time": "04:00:00"},
 }
+
+
+def scaled_mem(mem, scale):
+    return f"{int(round(int(mem.rstrip('G')) * scale))}G"
+
+
+def scaled_time(t, scale):
+    h, m, sec = map(int, t.split(":"))
+    total = int((h * 3600 + m * 60 + sec) * scale)
+    return f"{total // 3600:02d}:{total % 3600 // 60:02d}:{total % 60:02d}"
 
 
 def width(spec):
@@ -87,44 +98,57 @@ def active_heads(name):
             and not j.endswith("-collect")}
 
 
+def units(args):
+    """(label, scheme, fold file, overrides) for every requested evaluation unit: subsets for cv10/loyo/loro,
+    crops for loco."""
+    out = []
+    for scheme in args.schemes:
+        if scheme == "loco":
+            for crop in args.crops:
+                out.append((crop, scheme, ys.SPLITS / "loco" / f"{crop}.csv",
+                            [f"crop={crop}", "scheme=loco", "experiment.confirm_test=true"]))
+        else:
+            for subset in args.subsets:
+                out.append((subset, scheme, ys.SPLITS / subset / f"{scheme}.csv",
+                            [f"subset={subset}", f"scheme={scheme}"]))
+    return out
+
+
 def supersede_mixed(runs_root, args):
     """Move aside every requested run whose folds were run with different code versions (they can't be combined)."""
     import json
     import shutil
     moved = 0
-    for subset in args.subsets:
-        for scheme in args.schemes:
-            for spec in args.inputs:
-                for model in args.models:
-                    d = runs_root / subset / scheme / spec / model
-                    commits = {json.loads(f.read_text())["provenance"].get("git_commit") for f in d.glob("fold-*.json")}
-                    if len(commits) > 1:
-                        dest = runs_root / "_superseded" / "mixed-code" / subset / scheme / spec
-                        dest.mkdir(parents=True, exist_ok=True)
-                        shutil.move(str(d), str(dest / f"{model}-{int(time.time())}"))
-                        moved += 1
+    for label, scheme, _, _ in units(args):
+        for spec in args.inputs:
+            for model in args.models:
+                d = runs_root / label / scheme / spec / model
+                commits = {json.loads(f.read_text())["provenance"].get("git_commit") for f in d.glob("fold-*.json")}
+                if len(commits) > 1:
+                    dest = runs_root / "_superseded" / "mixed-code" / label / scheme / spec
+                    dest.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(d), str(dest / f"{model}-{int(time.time())}"))
+                    moved += 1
     print(f"# moved {moved} runs with mixed code versions to _superseded/mixed-code", flush=True)
 
 
 def plan(args, runs_root):
     tasks = []
-    for subset in args.subsets:
-        for scheme in args.schemes:
-            folds = sorted(pd.read_csv(ys.SPLITS / subset / f"{scheme}.csv").fold.unique())
-            for spec in args.inputs:
-                for model in args.models:
-                    out = runs_root / subset / scheme / spec / model
-                    res = RESOURCES[model]
-                    if (out / "metrics.json").exists():
-                        continue
-                    base = [f"subset={subset}", f"scheme={scheme}", f"input={spec}", f"model={model}",
-                            f"hydra.run.dir={out}"] + args.extra
-                    if res["per"] == "fold":
-                        for k in folds:
-                            if not (out / f"fold-{k}.json").exists():
-                                tasks.append((model, spec, base + [f"experiment.fold={k}"]))
-                    else:
-                        tasks.append((model, spec, base))
+    for label, scheme, fold_file, unit_overrides in units(args):
+        folds = sorted(pd.read_csv(fold_file).fold.unique())
+        for spec in args.inputs:
+            for model in args.models:
+                out = runs_root / label / scheme / spec / model
+                res = RESOURCES[model]
+                if (out / "metrics.json").exists():
+                    continue
+                base = unit_overrides + [f"input={spec}", f"model={model}", f"hydra.run.dir={out}"] + args.extra
+                if res["per"] == "fold":
+                    for k in folds:
+                        if not (out / f"fold-{k}.json").exists():
+                            tasks.append((model, spec, base + [f"experiment.fold={k}"]))
+                else:
+                    tasks.append((model, spec, base))
     return tasks
 
 
@@ -139,10 +163,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--name", required=True)
     parser.add_argument("--subsets", nargs="+", default=ys.SUBSETS, choices=ys.SUBSETS)
-    parser.add_argument("--schemes", nargs="+", default=list(SCHEMES), choices=SCHEMES)
+    parser.add_argument("--schemes", nargs="+", default=["cv10", "loyo", "loro"], choices=SCHEMES)
+    parser.add_argument("--crops", nargs="+", default=ys.LOCO_CROPS, choices=ys.LOCO_CROPS, help="for --schemes loco")
     parser.add_argument("--inputs", nargs="+", required=True)
     parser.add_argument("--models", nargs="+", required=True, choices=sorted(RESOURCES))
     parser.add_argument("--max-running", type=int, default=200)
+    parser.add_argument("--resource-scale", type=float, default=1.0,
+                        help="multiply memory and time limits (loco pools countries, so its training sets are larger)")
     parser.add_argument("--extra", nargs="*", default=[], help="extra Hydra overrides for every task")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--supersede-mixed", action="store_true",
@@ -183,7 +210,8 @@ def main():
             tfile.write_text("".join(" ".join(shlex.quote(o) for o in ov) + "\n" for ov in items))
         cmd = [f"{SLURM}/sbatch", "--parsable", f"--job-name=ys-{args.name}-{tag}",
                f"--array=0-{len(items) - 1}%{per_array}", f"--cpus-per-task={res['cpus']}",
-               f"--mem={res['wide_mem'] if wide else res['mem']}", f"--time={res['time']}",
+               f"--mem={scaled_mem(res['wide_mem'] if wide else res['mem'], args.resource_scale)}",
+               f"--time={scaled_time(res['time'], args.resource_scale)}",
                f"--output={log_dir}/{tag}-%A_%a.log", "--partition=gpu" if res["gpu"] else "--partition=main"]
         if res["gpu"]:
             cmd.append("--gres=gpu:1")

@@ -79,7 +79,8 @@ class Block:
 
     def take(self, local):
         if self.index is not None:
-            return self.array[self.index[local]]
+            x = self.array[self.index[local]]
+            return x[:, self.columns] if self.columns is not None else x
         x = np.asarray(self.array[local])
         return x[:, self.columns] if self.columns is not None else x
 
@@ -88,7 +89,9 @@ class Data:
     """The pixels of one or more subsets, addressed by global row and global field id, for an input spec such as
     "s2", "galileo" or "galileo+mind"."""
 
-    def __init__(self, cfg, subsets, spec):
+    def __init__(self, cfg, subsets, spec, align=False):
+        """align: when subsets have different columns (inputs on a per-subset time grid, such as s2-aligned), keep
+        only the columns all subsets share, by name (used by scheme=loco, which pools countries)."""
         root = Path(cfg.paths.features)
         blocks = spec.split("+")
         if len(set(blocks)) != len(blocks):
@@ -104,7 +107,10 @@ class Data:
             if i == 0:
                 self.feature_names = names
             elif names != self.feature_names:
-                raise ValueError(f"Feature columns differ in {s}")
+                if not align:
+                    raise ValueError(f"Feature columns differ in {s}")
+                keep = set(names)
+                self.feature_names = [n for n in self.feature_names if n in keep]
             m = np.load(meta_path)
             fidx = m["field_idx"]
             if np.any(np.diff(fidx) < 0):
@@ -119,6 +125,14 @@ class Data:
             targets.append(m["target"])
             self.provenance.append({"subset": s, "v1_meta_sha256": meta_sha, "rows": int(len(fidx)),
                                     "blocks": [blk.provenance for blk in part]})
+        if align:
+            keep = set(self.feature_names)
+            for part in self.parts:
+                for blk in part:
+                    blk.columns = np.array([j for j, n in enumerate(blk.names) if n in keep], dtype=int)
+                    blk.names = [n for n in blk.names if n in keep]
+                if [n for blk in part for n in blk.names] != self.feature_names:
+                    raise ValueError("Shared columns are in a different order across subsets")
         self.n_features = len(self.feature_names)
         self.field_names = np.array(field_names)
         self.start, self.stop = np.array(starts), np.array(stops)
@@ -211,7 +225,7 @@ def main(cfg):
         label = cfg.subset
 
     folds = pd.read_csv(fold_file).set_index("field_shared_name").fold
-    data = Data(cfg, subsets, cfg.input)
+    data = Data(cfg, subsets, cfg.input, align=scheme == "loco")
     if set(data.field_names) != set(folds.index):
         raise ValueError("Fields in the feature cache and the fold file differ")
     gfold = folds.loc[data.field_names].to_numpy()

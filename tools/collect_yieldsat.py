@@ -41,6 +41,20 @@ def row_of(result, sweep):
     return r
 
 
+def loco_rows(result, sweep):
+    """Leave one country out: the crop row (pooled over held-out countries) plus one row per held-out country,
+    labelled "<crop>>COUNTRY" (a single fold, so its mean and pooled scores are the same and std is 0)."""
+    rows = [row_of(result, sweep)]
+    for f in result["per_fold"]:
+        r = dict(rows[0], subset=f"{result['label']}>{f['held_out_country']}", folds=1,
+                 task_hours=round(f["seconds"] / 3600, 3))
+        for m in res.METRICS:
+            r[f"{m}_mean"] = r[f"pooled_{m}"] = round(f[m], 4)
+            r[f"{m}_std"] = 0.0
+        rows.append(r)
+    return rows
+
+
 def efficiency(sweep):
     """sacct summary per array (head x width): elapsed vs limit, CPU use, memory use."""
     fmt = "JobID,JobName,State,Elapsed,Timelimit,TotalCPU,AllocCPUS,ReqMem,MaxRSS"
@@ -112,7 +126,7 @@ def main():
             continue
         if result["smoke"]:
             continue
-        rows.append(row_of(result, args.sweep))
+        rows.extend(loco_rows(result, args.sweep) if result["scheme"] == "loco" else [row_of(result, args.sweep)])
     if incomplete:
         print(f"{len(incomplete)} incomplete runs:\n  " + "\n  ".join(incomplete[:50]))
     if rows:
