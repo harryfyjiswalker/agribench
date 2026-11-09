@@ -22,6 +22,7 @@ country (2.3b). LOCO runs are the final evaluation: they need experiment.confirm
 import getpass
 import json
 import os
+import re
 import resource
 import subprocess
 import time
@@ -89,9 +90,10 @@ class Data:
     """The pixels of one or more subsets, addressed by global row and global field id, for an input spec such as
     "s2", "galileo" or "galileo+mind"."""
 
-    def __init__(self, cfg, subsets, spec, align=False):
+    def __init__(self, cfg, subsets, spec, align=False, season_cutoff=None):
         """align: when subsets have different columns (inputs on a per-subset time grid, such as s2-aligned), keep
-        only the columns all subsets share, by name (used by scheme=loco, which pools countries)."""
+        only the columns all subsets share, by name (used by scheme=loco, which pools countries).
+        season_cutoff: keep only columns named *_d<days> with days <= cutoff (days after sowing; early season)."""
         root = Path(cfg.paths.features)
         blocks = spec.split("+")
         if len(set(blocks)) != len(blocks):
@@ -125,7 +127,15 @@ class Data:
             targets.append(m["target"])
             self.provenance.append({"subset": s, "v1_meta_sha256": meta_sha, "rows": int(len(fidx)),
                                     "blocks": [blk.provenance for blk in part]})
-        if align:
+        if season_cutoff is not None:
+            days = [re.search(r"_d([+-]\d+)$", n) for n in self.feature_names]
+            if not all(days):
+                raise SystemExit(f"experiment.season_cutoff needs an input whose columns are all *_d<days after "
+                                 f"sowing> (s2-aligned, biophys); {spec} is not")
+            self.feature_names = [n for n, d in zip(self.feature_names, days) if int(d.group(1)) <= season_cutoff]
+            if not self.feature_names:
+                raise SystemExit(f"No columns at or before day {season_cutoff}")
+        if align or season_cutoff is not None:
             keep = set(self.feature_names)
             for part in self.parts:
                 for blk in part:
@@ -225,7 +235,12 @@ def main(cfg):
         label = cfg.subset
 
     folds = pd.read_csv(fold_file).set_index("field_shared_name").fold
-    data = Data(cfg, subsets, cfg.input, align=scheme == "loco")
+    cutoff = cfg.experiment.get("season_cutoff")
+    fraction = float(cfg.experiment.get("train_fraction") or 1.0)
+    if not 0 < fraction <= 1:
+        raise SystemExit("experiment.train_fraction must be in (0, 1]")
+    data = Data(cfg, subsets, cfg.input, align=scheme == "loco",
+                season_cutoff=None if cutoff is None else int(cutoff))
     if set(data.field_names) != set(folds.index):
         raise ValueError("Fields in the feature cache and the fold file differ")
     gfold = folds.loc[data.field_names].to_numpy()
@@ -253,6 +268,7 @@ def main(cfg):
         "dataset": "yieldsat", "label": label, "scheme": scheme, "input": cfg.input, "model": head.name,
         "split": "smoke" if smoke else ("final" if scheme == "loco" else "development"),
         "smoke": smoke, "seed": seed, "pixel_cap": cap, "folds_in_scheme": len(np.unique(gfold)),
+        "season_cutoff": None if cutoff is None else int(cutoff), "train_fraction": fraction,
         "provenance": {"fold_file": str(fold_file), "fold_file_sha256": ys.sha256(fold_file),
                        "folds_manifest_sha256": ys.sha256(splits / "manifest.json"),
                        "caches": data.provenance, "n_features": int(data.n_features),
@@ -265,6 +281,10 @@ def main(cfg):
         rng = np.random.default_rng(seed + 1000 * int(k))
         train_f = np.flatnonzero(gfold != k)
         test_f = np.flatnonzero(gfold == k)
+        if fraction < 1:  # label efficiency: a random subset of the training fields (own stream, so the pixel
+            # sample of the kept fields does not depend on the fraction)
+            n_keep = max(10, int(round(fraction * len(train_f))))
+            train_f = np.sort(np.random.default_rng([seed, int(k), 7]).choice(train_f, n_keep, replace=False))
         tr = data.rows(train_f, cap, rng)
         x_tr, y_tr = data.load(tr)
         t_load = time.time() - t0

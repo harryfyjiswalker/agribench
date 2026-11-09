@@ -92,7 +92,8 @@ def main():
             m = json.loads((run / "metrics.json").read_text())
             if m["smoke"]:
                 continue
-            key = {"subset": m["label"], "scheme": m["scheme"], "input": m["input"], "model": m["model"]}
+            # the input directory name carries any variant suffix (s2-aligned@d060, s2-aligned@f0.10-s1)
+            key = {"subset": m["label"], "scheme": m["scheme"], "input": run.parent.name, "model": m["model"]}
             t = field_table(run)
             ci.append({**key, **bootstrap(t, args.reps, rng)})
             if m["scheme"] not in GROUP:

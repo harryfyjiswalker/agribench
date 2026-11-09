@@ -26,10 +26,15 @@ def run_dirs(root):
     return sorted({f.parent for f in root.glob("*/*/*/*/fold-*.json")})
 
 
-def row_of(result, sweep):
-    r = {"dataset": "yieldsat", "subset": result["label"], "scheme": result["scheme"], "input": result["input"],
+def row_of(result, sweep, input_dir=None):
+    """input_dir: the run's input directory name, which carries a variant suffix (s2-aligned@d060) if any."""
+    r = {"dataset": "yieldsat", "subset": result["label"], "scheme": result["scheme"],
+         "input": input_dir or result["input"],
          "model": result["model"], "folds": result["folds"], "n_features": result["provenance"]["n_features"],
          "pixel_cap": result["pixel_cap"]}
+    if result.get("season_cutoff") is not None or result.get("train_fraction", 1.0) < 1:
+        r.update(season_cutoff=result.get("season_cutoff"), train_fraction=result.get("train_fraction", 1.0),
+                 seed=result["seed"])
     for m in res.METRICS:
         r[f"{m}_mean"] = round(result["summary"][m]["mean"], 4)
         r[f"{m}_std"] = round(result["summary"][m]["std"], 4)
@@ -126,11 +131,13 @@ def main():
             continue
         if result["smoke"]:
             continue
-        rows.extend(loco_rows(result, args.sweep) if result["scheme"] == "loco" else [row_of(result, args.sweep)])
+        rows.extend(loco_rows(result, args.sweep) if result["scheme"] == "loco" else
+                    [row_of(result, args.sweep, d.parent.name)])
     if incomplete:
         print(f"{len(incomplete)} incomplete runs:\n  " + "\n  ".join(incomplete[:50]))
     if rows:
-        df = pd.DataFrame(rows).sort_values(["subset", "scheme", "input", "model"])
+        df = pd.DataFrame(rows).sort_values([c for c in ("subset", "scheme", "input", "model", "season_cutoff",
+                                                              "train_fraction", "seed") if c in {k for r in rows for k in r}])
         args.out.mkdir(parents=True, exist_ok=True)
         path = args.out / f"{args.sweep}.csv"
         df.to_csv(path, index=False)

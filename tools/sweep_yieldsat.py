@@ -4,7 +4,8 @@
     python -m tools.sweep_yieldsat --name phase1 ... --dry-run      # print the plan and cost estimate only
 
 Every (subset, scheme, input, model) combination writes to runs/yieldsat/sweeps/<name>/<subset>/<scheme>/<input>/
-<model>/. Scheme loco (leave one country out, protocol 2.3b) is planned per crop instead of per subset
+<model>/ (variants for early season and label efficiency add a suffix to <input>: s2-aligned@d060,
+s2-aligned@f0.10-s1). Scheme loco (leave one country out, protocol 2.3b) is planned per crop instead of per subset
 (<name>/<crop>/loco/<input>/<model>/) and runs with experiment.confirm_test=true; pass --schemes loco alone. CPU heads run one array task per outer fold, so the folds of a run execute in parallel; GPU heads (TabPFN,
 TabICL) run all folds of a run in one task, so each GPU job loads the model once. Tasks whose result already exists
 are skipped, so re-running the same command resumes a sweep. At most --max-running tasks of the sweep run at once (split evenly over its arrays)
@@ -114,13 +115,26 @@ def units(args):
     return out
 
 
+def variants(args):
+    """(directory suffix, overrides): the base run, or one per early-season cutoff / label fraction x seed (2.11).
+    The suffix keeps each variant's run directory apart: <input>@d060, <input>@f0.10-s1."""
+    if args.season_cutoffs and args.train_fractions:
+        raise SystemExit("Use --season-cutoffs or --train-fractions, not both")
+    if args.season_cutoffs:
+        return [(f"@d{c:03d}", [f"experiment.season_cutoff={c}"]) for c in args.season_cutoffs]
+    if args.train_fractions:
+        return [(f"@f{f:.2f}-s{s}", [f"experiment.train_fraction={f}", f"experiment.seed={s}"])
+                for f in args.train_fractions for s in args.seeds]
+    return [("", [])]
+
+
 def supersede_mixed(runs_root, args):
     """Move aside every requested run whose folds were run with different code versions (they can't be combined)."""
     import json
     import shutil
     moved = 0
     for label, scheme, _, _ in units(args):
-        for spec in args.inputs:
+        for spec in [f"{i}{suffix}" for i in args.inputs for suffix, _ in variants(args)]:
             for model in args.models:
                 d = runs_root / label / scheme / spec / model
                 commits = {json.loads(f.read_text())["provenance"].get("git_commit") for f in d.glob("fold-*.json")}
@@ -137,18 +151,20 @@ def plan(args, runs_root):
     for label, scheme, fold_file, unit_overrides in units(args):
         folds = sorted(pd.read_csv(fold_file).fold.unique())
         for spec in args.inputs:
-            for model in args.models:
-                out = runs_root / label / scheme / spec / model
-                res = RESOURCES[model]
-                if (out / "metrics.json").exists():
-                    continue
-                base = unit_overrides + [f"input={spec}", f"model={model}", f"hydra.run.dir={out}"] + args.extra
-                if res["per"] == "fold":
-                    for k in folds:
-                        if not (out / f"fold-{k}.json").exists():
-                            tasks.append((model, spec, base + [f"experiment.fold={k}"]))
-                else:
-                    tasks.append((model, spec, base))
+            for suffix, var_overrides in variants(args):
+                for model in args.models:
+                    out = runs_root / label / scheme / f"{spec}{suffix}" / model
+                    res = RESOURCES[model]
+                    if (out / "metrics.json").exists():
+                        continue
+                    base = (unit_overrides + [f"input={spec}", f"model={model}", f"hydra.run.dir={out}"]
+                            + var_overrides + args.extra)
+                    if res["per"] == "fold":
+                        for k in folds:
+                            if not (out / f"fold-{k}.json").exists():
+                                tasks.append((model, spec, base + [f"experiment.fold={k}"]))
+                    else:
+                        tasks.append((model, spec, base))
     return tasks
 
 
@@ -167,6 +183,11 @@ def main():
     parser.add_argument("--crops", nargs="+", default=ys.LOCO_CROPS, choices=ys.LOCO_CROPS, help="for --schemes loco")
     parser.add_argument("--inputs", nargs="+", required=True)
     parser.add_argument("--models", nargs="+", required=True, choices=sorted(RESOURCES))
+    parser.add_argument("--season-cutoffs", nargs="+", type=int, default=[],
+                        help="early season: one run per cutoff (days after sowing; inputs with *_d<days> columns)")
+    parser.add_argument("--train-fractions", nargs="+", type=float, default=[],
+                        help="label efficiency: one run per fraction of training fields and seed")
+    parser.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2], help="for --train-fractions")
     parser.add_argument("--max-running", type=int, default=200)
     parser.add_argument("--resource-scale", type=float, default=1.0,
                         help="multiply memory and time limits (loco pools countries, so its training sets are larger)")

@@ -173,7 +173,7 @@ async function load() {
   fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))], d => DATASET_LABEL[d] || d);
   fill("f-testset", [...new Set(ROWS.filter(r => r.dataset === "earthshift").map(r => r.test_set))], t => t);
   document.getElementById("f-testset").addEventListener("change", render);
-  fill("f-scheme", ["cv10", "loyo", "loro"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
+  fill("f-scheme", ["cv10", "loyo", "loro", "loco"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
   fill("f-model", HEAD_ORDER.filter(m => ROWS.some(r => r.model === m)), m => HEAD_LABEL[m] || m);
   for (const id of ["f-dataset", "f-metric", "f-model"]) document.getElementById(id).addEventListener("change", render);
   document.getElementById("f-scheme").addEventListener("change", () => { defaultMetric(); render(); });
@@ -206,9 +206,11 @@ function render() {
   document.querySelectorAll(".ys").forEach(el => el.classList.toggle("hidden", es));
   document.querySelectorAll(".es").forEach(el => el.classList.toggle("hidden", !es));
   if (es) return renderEarthShift(ROWS.filter(r => r.dataset === "earthshift" && r.test_set === val("f-testset")));
-  const rows = ROWS.filter(r => r.dataset === ds && r.scheme === scheme);
+  // Early-season and label-efficiency variants (input "s2-aligned@d060") are not mixed into the main comparison.
+  const rows = ROWS.filter(r => r.dataset === ds && r.scheme === scheme && !String(r.input).includes("@"));
   document.getElementById("metric-note").textContent = metric.endsWith("r2") && scheme !== "cv10" ? POOLED_NOTE : "";
-  renderChart(rows, metric);
+  // Leave one country out: the chart averages the crop rows; the table also lists each held-out country ("wheat>GER").
+  renderChart(rows.filter(r => !String(r.subset).includes(">")), metric);
   renderTable(rows.filter(r => r.model === val("f-model")), metric);
 }
 
@@ -323,8 +325,9 @@ function renderTable(rows, metric) {
   const data = inputs.map(i => {
     const o = {input: i, cells: {}};
     for (const s of subsets) { const r = rows.find(q => q.input === i && q.subset === s); if (r) o.cells[s] = r; }
-    const vs = Object.values(o.cells).map(r => get(r, metric));
-    o.mean = vs.length === subsets.length ? mean(vs) : NaN;
+    const main = subsets.filter(s => !s.includes(">"));  // per-country LOCO columns are not averaged again
+    const vs = main.filter(s => o.cells[s]).map(s => get(o.cells[s], metric));
+    o.mean = vs.length === main.length ? mean(vs) : NaN;
     return o;
   });
   const key = r => sort.key === "input" ? label(r.input) : (sort.key === "mean" ? r.mean : (r.cells[sort.key] ? get(r.cells[sort.key], metric) : undefined));

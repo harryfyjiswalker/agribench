@@ -20,6 +20,8 @@ experiment:
   confirm_test: false   # required for scheme=loco (the final evaluation, 2.3b)
   predict_batch: 200000
   fold: null            # run one outer fold only (parallel sweeps); null = all folds
+  season_cutoff: null   # early season (2.11): keep only columns at or before this many days after sowing
+  train_fraction: 1.0   # label efficiency (2.11): train on this fraction of each fold's training fields
 hydra:
   job:
     chdir: false
