@@ -12,11 +12,14 @@ people are directly comparable.
 
 | Task | Dataset | Scored on | Status | Protocol |
 |---|---|---|---|---|
-| Crop classification, in distribution | [PASTIS-R](https://zenodo.org/records/5745151) (France, 18 crops, 85,951 parcels) | parcel mIoU, official 5 folds (fold 5 reserved) | runner and first results | [protocols/protocols.md](protocols/protocols.md) |
-| Crop classification, out of distribution | [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) (French overseas territories) | mIoU-8, leave one island out | protocol agreed, data downloading, no runner yet | [protocols/planteur.md](protocols/planteur.md) |
+| Crop classification | [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) (French overseas territories) | mIoU-8, leave one island out | protocol agreed, data downloading, no runner yet | [protocols/planteur.md](protocols/planteur.md) |
 | Yield prediction | [YieldSAT](https://yieldsat.github.io/) (Argentina, Brazil, Germany, Uruguay; 2,173 fields, 10 m yield maps) | R² and RMSE per field and pixel; 10-fold, leave one year out, leave one region out; final: leave one country out | runner, sweeps, 8 representations; first sweep running | [protocols/yieldsat.md](protocols/yieldsat.md) |
 | Field delineation | [EarthShift](https://earthshift.github.io/) (location and temporal shift tasks) | in- and out-of-distribution mIoU | splits and inputs built; training code under review, learning-rate sweeps running | [protocols/earthshift.md](protocols/earthshift.md) |
 | Phenology | – | – | not started | – |
+
+PASTIS-R (in-distribution crop classification in France) was retired on 2026-11-09: it is close to saturated and
+says little about generalisation, which PLANTEUR tests. Its code, features and pilot results are kept; see
+[docs/pastis-r.md](docs/pastis-r.md).
 
 Every protocol follows the dataset paper exactly where the paper is specific, and marks where AgriBench had to
 decide something itself.
@@ -95,26 +98,6 @@ The sweep tool submits every subset × scheme × input × head as Slurm job arra
 - When the arrays finish, a collect job combines the folds and writes `results/yieldsat/mysweep.csv`. That table
   holds aggregate scores only, safe to commit; the dashboard reads it.
 
-## PASTIS-R
-
-    sbatch bench.sbatch encoder=galileo-base input=pastis-r/s2-parcel-medians model=xgboost validation=pilot
-
-| Choice | Options |
-|---|---|
-| `encoder=` | `galileo-base`, `summaries` (raw monthly bands), `presto-base` |
-| `input=` | `pastis-r/s2-parcel-medians` (galileo-base, summaries); `pastis-r/s2-parcel-medians-location` (presto-base) |
-| `model=` | `logistic_regression`, `rf`, `extra_trees`, `xgboost`, `lightgbm`, `mlp`, `tabpfn` |
-| `validation=` | `pilot` (default), `rehearsal`, `final` |
-
-- `pilot`: train on folds 1–3 with default settings, score fold 4.
-- `rehearsal`: tune on fold 3 (macro IoU), refit on folds 1–3, score fold 4: the `final` procedure one fold
-  earlier, so it never touches fold 5.
-- `final`: tune on fold 4, refit on folds 1–4, score fold 5 once. Needs `experiment.confirm_test=true`; logged in
-  `$project/runs/pastis/test-ledger.jsonl`. Fold 5 is reserved: never use it to choose models.
-- `tabpfn` needs a GPU: add `--partition=gpu --gres=gpu:1 --mem=32G` after `sbatch`.
-- Many at once: `bash tools/sweep.sh "galileo-base summaries" "logistic_regression rf xgboost" validation=pilot`.
-- Everyone's runs in one table: `$project/envs/benchmark-v2/bin/python tools/results.py`.
-
 ## EarthShift and PLANTEUR
 
 Both protocols are agreed: [protocols/earthshift.md](protocols/earthshift.md) and
@@ -126,8 +109,7 @@ downloading and has no runner yet.
 
 All results go to the [dashboard](https://harryfyjiswalker.github.io/agribench/), one view per dataset. It reads
 the aggregate tables in `results/<dataset>/`, which the sweep tools write; commit and push a table to publish it.
-YieldSAT is there now; EarthShift and PLANTEUR join when their first results are in. (The early PASTIS-R pilot
-runs are listed in [LEADERBOARD.md](LEADERBOARD.md).)
+YieldSAT is there now; EarthShift and PLANTEUR join when their first results are in.
 
 The repo is public. Commit aggregate scores only: never field names, locations, fold lists or predictions (the
 datasets have their own licences).
@@ -138,10 +120,9 @@ datasets have their own licences).
 
 | Path | Contents |
 |---|---|
-| `$project/datasets/` | raw datasets (YieldSAT, PASTIS-R, PLANTEUR, EarthShift) |
+| `$project/datasets/` | raw datasets (YieldSAT, PLANTEUR, EarthShift; PASTIS-R archived) |
 | `$project/splits/` | frozen fold files per dataset (never edited by hand) |
 | `$project/features/yieldsat/` | YieldSAT inputs: `v1/` (raw), and one folder per representation (`mind/`, `galileo/`, `aef/`, …) |
-| `$project/features/pastis-r/` | PASTIS-R encoder features |
 | `$project/runs/` | run outputs per dataset; `runs/yieldsat/sweeps/<name>/` for sweeps; test ledgers |
 | `$project/checkpoints/`, `$project/upstream/` | model weights and pinned model source code |
 | `$project/envs/` | shared Python environments: `benchmark-v2` (everything), `tessera` (adds geotessera) |
@@ -153,15 +134,13 @@ it for billing.
 
 ## Extending AgriBench
 
-- **A new head:** copy a file in `conf/yieldsat/model/` (or `conf/model/` for PASTIS-R). Set `name`, an
+- **A new head:** copy a file in `conf/yieldsat/model/`. Set `name`, an
   `estimator` (any scikit-learn-compatible class via `_target_`) and optionally `search.param_grid`; then use
   `model=<name>`. Add its resources to `RESOURCES` in `tools/sweep_yieldsat.py` to sweep it.
 - **A new YieldSAT input:** write a script that saves `features/yieldsat/<name>/<subset>.npy` with rows in the
   order of `v1/<subset>-meta.npz`, plus a `<subset>.json` with `kind`, `feature_names`, `rows` and that meta
   file's `v1_meta_sha256`. `tools/extract_yieldsat_aef.py` is a short example. It's then usable as
   `input=<name>`, alone or with `+`.
-- **A new PASTIS-R encoder:** copy `tools/adapters/template.py`, add `conf/encoder/<name>.yaml` with the source
-  revision and weights hash pinned, smoke-test on 8 parcels, then extract once with `extract.sbatch`.
 
 ## Python environment
 
