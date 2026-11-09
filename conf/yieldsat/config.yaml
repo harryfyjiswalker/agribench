@@ -7,7 +7,7 @@ defaults:
 subset: null        # ARG-C ARG-S ARG-W BRA-C BRA-S BRA-W GER-R GER-W URG-S  (cv10, loyo, loro)
 crop: null          # corn soybean wheat                                    (loco)
 scheme: cv10        # cv10 | loyo | loro | loco
-input: s2           # s2 | s2-adm | latlon | mind | satclip | galileo, or joined with + (e.g. galileo+mind)
+input: s2           # s2 | s2-adm | s2-aligned | latlon | mind | satclip | galileo | aef | tessera, or joined with + (e.g. galileo+mind)
 paths:
   project: ${oc.env:AGRIBENCH_PROJECT,/lustre/shared/agriscience-benchmark}
   features: ${oc.env:AGRIBENCH_YIELDSAT_FEATURES,${paths.project}/features/yieldsat}   # v1/ cache + representation folders
