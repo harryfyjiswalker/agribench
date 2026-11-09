@@ -82,6 +82,7 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 |---|---|---|
 | `s2` | raw Sentinel-2: 12 bands × 24 time steps over the season | 288 |
 | `s2-adm` | `s2` plus weather, soil, topography and coordinates (the paper's "S2 + ADM") | 488 |
+| `s2-aligned` | `s2` put on a fixed season axis: each band interpolated to every 15 days since the field's sowing date. The raw `s2` time steps are not tied to the season, so the same step can be a different growth stage in different years | ~250 (varies by subset) |
 | `latlon` | the pixel's latitude and longitude: the simple control for the location encoders | 2 |
 | `mind` | [MIND](https://arxiv.org/abs/2609.25454) location encoder. Sees only the location. | 3072 |
 | `satclip` | [SatCLIP](https://arxiv.org/abs/2311.17179) location encoder. Sees only the location. | 256 |

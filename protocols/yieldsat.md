@@ -215,6 +215,8 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `satclip` | SatCLIP ViT16-L40 location encoder, 256-d (Klemmer et al.) | AgriBench |
 | `galileo` | Galileo-Base, 768-d, from the pixel's S2 series | AgriBench |
 | `aef` | AlphaEarth Foundations annual embedding, 64-d | AgriBench |
+| `tessera` | TESSERA annual embedding, 128-d | AgriBench |
+| `s2-aligned` | 12 S2 bands interpolated onto a fixed grid of days since sowing (every 15 days) | AgriBench: season-aligned version of `s2` |
 | combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
@@ -254,6 +256,15 @@ SHA-256 and the runner refuses a mismatch):
 - `aef/` (`tools/extract_yieldsat_aef.py`): the 64-d AlphaEarth annual embedding of the calendar year of the
   field's harvest date, read with HTTP range requests from the Source Cooperative mirror. AEF starts in 2017,
   so the 48 German fields harvested in 2016 have no AEF value (imputed by the runner, and counted in the json).
+- `s2-aligned/` (`tools/build_yieldsat_s2_aligned.py`) [AgriBench]: the raw `s2` slots are not tied to the season
+  (1, note 5). Checked on 2026-11-09: in BRA-C, slot 12 is 30 days before sowing in 2017 but 77 days after it in
+  2023; in ARG-C it is about 110 days after sowing in most years but 24–42 days in 2021 and 2023. A model that
+  learns from slot positions can then misread a new year, which matters for LOYO (not for CV10, where test
+  fields share years with training fields). `s2-aligned` puts each pixel's series on one axis, days since the
+  field's sowing date: per pixel and band, linear interpolation between its valid observations onto -15, 0, 15,
+  … days, up to the subset's 95th percentile of the last observation day (capped at 330). Grid points outside
+  the pixel's observed range stay NaN. Only the sowing date is used, never the harvest date or yield. It is an
+  extra input beside `s2`, not a replacement, so the paper's input is still reported as the paper defines it.
 
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
 
@@ -308,6 +319,11 @@ pixels within a field are strongly autocorrelated anyway.
 - Each run records the SHA-256 of its fold file, the input file and the config, as for PASTIS-R.
 - **Development:** CV10, LOYO and LORO are reported as cross-validation, like the paper. Model choices are
   made on CV10. LOYO and LORO are reported, not tuned on.
+- **[AgriBench] Pooled R² for LOYO and LORO** (2026-11-09). Each run reports R² and RMSE both as the mean over
+  folds and pooled (all held-out predictions of the run scored together). For LOYO and LORO the dashboard shows
+  pooled R² by default: R² within one held-out year or region is measured against that fold's own mean, so a
+  model that ranks fields well but misses the fold's overall level scores far below zero, and one such fold
+  dominates the mean (ARG-W, LightGBM on `s2`, LOYO: −2.91 as a mean of folds, 0.67 pooled).
 - **Final:** LOCO (2.3b) is run only for configurations chosen on the development schemes, and every run is
   logged in the ledger.
 
