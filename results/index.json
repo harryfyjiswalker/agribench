@@ -1,8 +1,11 @@
 {
-  "updated": "2026-11-09 17:49 CET",
+  "updated": "2026-11-09 19:39 CET",
   "files": [
     {
       "path": "yieldsat/phase1.csv"
+    },
+    {
+      "path": "yieldsat/phase2.csv"
     }
   ]
 }
