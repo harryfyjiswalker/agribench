@@ -19,6 +19,7 @@ score weighs the time limit most, so keep these close to measured use (tools/col
 """
 import argparse
 import os
+import time
 import shlex
 import subprocess
 from pathlib import Path
@@ -77,6 +78,33 @@ def frozen_code(checkout, runs_root, dry):
     return code
 
 
+def active_heads(name):
+    """Heads of this sweep that still have queued or running arrays (planning now would duplicate their tasks)."""
+    out = subprocess.run([f"{SLURM}/squeue", "-h", "--me", "-o", "%j"], capture_output=True, text=True).stdout
+    prefix = f"ys-{name}-"
+    return {j.removeprefix(prefix).rsplit("-", 1)[0] for j in out.split() if j.startswith(prefix)
+            and not j.endswith("-collect")}
+
+
+def supersede_mixed(runs_root, args):
+    """Move aside every requested run whose folds were run with different code versions (they can't be combined)."""
+    import json
+    import shutil
+    moved = 0
+    for subset in args.subsets:
+        for scheme in args.schemes:
+            for spec in args.inputs:
+                for model in args.models:
+                    d = runs_root / subset / scheme / spec / model
+                    commits = {json.loads(f.read_text())["provenance"].get("git_commit") for f in d.glob("fold-*.json")}
+                    if len(commits) > 1:
+                        dest = runs_root / "_superseded" / "mixed-code" / subset / scheme / spec
+                        dest.mkdir(parents=True, exist_ok=True)
+                        shutil.move(str(d), str(dest / f"{model}-{int(time.time())}"))
+                        moved += 1
+    print(f"# moved {moved} runs with mixed code versions to _superseded/mixed-code", flush=True)
+
+
 def plan(args, runs_root):
     tasks = []
     for subset in args.subsets:
@@ -116,6 +144,10 @@ def main():
     parser.add_argument("--max-running", type=int, default=200)
     parser.add_argument("--extra", nargs="*", default=[], help="extra Hydra overrides for every task")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--supersede-mixed", action="store_true",
+                        help="first move aside runs whose folds came from different commits, so they rerun cleanly")
+    parser.add_argument("--allow-active", action="store_true",
+                        help="plan even though arrays of the same head are still queued (may duplicate tasks)")
     args = parser.parse_args()
 
     checkout = Path(__file__).resolve().parents[1]
@@ -124,6 +156,12 @@ def main():
     log_dir = runs_root / "_logs"
     for d in (task_dir, log_dir):
         d.mkdir(parents=True, exist_ok=True)
+    busy = active_heads(args.name) & set(args.models)
+    if busy and not args.allow_active:
+        raise SystemExit(f"Arrays for {sorted(busy)} in sweep {args.name} are still queued or running; wait for "
+                         "them (re-running then resumes) or pass --allow-active.")
+    if args.supersede_mixed and not args.dry_run:
+        supersede_mixed(runs_root, args)
     repo = frozen_code(checkout, runs_root, args.dry_run)
     widths = {spec: width(spec) for spec in args.inputs}
     tasks = plan(args, runs_root)
