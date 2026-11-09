@@ -91,6 +91,11 @@ predictions and the resolved config.
 | `$project/inputs/pastis-r` | prepared inputs the encoders read |
 | `$project/checkpoints`, `$project/upstream` | model weights and pinned encoder source code |
 | `$project/runs/pastis` | run outputs and the fold-5 ledger |
+| `$project/project.env` | optional Anunna project number for billing, one line `ANUNNA_PROJECT=<number>` |
+
+Every batch script first loads `tools/slurm_env.sh`. It limits library threads to the cores the job asked for. If
+`$project/project.env` (or your own `export ANUNNA_PROJECT=<number>`) gives a project number, it also tags the job
+with it, as Anunna asks for billing, unless you passed `--comment` yourself. Without a number, jobs run as before.
 
 The PASTIS-R data path is set in `conf/dataset/pastis_s2.yaml`. Environment overrides: `AGRIBENCH_DATA`,
 `AGRIBENCH_FEATURES`, `AGRIBENCH_RUNS`, `AGRIBENCH_PROJECT`, `AGRIBENCH_TABPFN_CKPT`, `BENCHMARK_PYTHON`.

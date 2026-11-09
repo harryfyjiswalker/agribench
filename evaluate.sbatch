@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -l
 #SBATCH --job-name=pastis-probe
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
@@ -6,6 +6,7 @@
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
 set -eu
+source "$SLURM_SUBMIT_DIR/tools/slurm_env.sh"   # threads, optional project number
 
 if [[ $# -ne 2 || $1 != representation=* || $2 != classifier=linear-probe ]]; then
   echo "Usage: sbatch evaluate.sbatch representation=NAME classifier=linear-probe"
