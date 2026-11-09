@@ -25,6 +25,8 @@
 
 ### Out-Of-Distribution (PLANTEUR)
 
+- [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) (Wolters _et al._, 2026): crop-type segmentation in France's overseas territories, scored by mIoU-8 with leave-one-island-out; protocol and download in [protocols/planteur.md](protocols/planteur.md).
+
 ## Yield Prediction
 
 - [YieldSAT](https://yieldsat.github.io/) (Miranda _et al._, 2026)
