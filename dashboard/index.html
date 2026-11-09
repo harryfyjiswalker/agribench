@@ -70,7 +70,7 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
 <main>
   <h1>AgriBench results</h1>
   <p class="lede">Frozen feature representations (raw inputs, location encoders, geospatial foundation models) scored under
-    each dataset's official cross-validation, with a fixed set of heads. Scores are means over each scheme's folds.</p>
+    each dataset's official cross-validation, with a fixed set of heads. Leave-one-year-out and leave-one-region-out default to R² pooled over folds.</p>
   <p class="meta" id="meta">Loading results…</p>
 
   <section class="card">
@@ -78,10 +78,12 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
       <label>Dataset <select id="f-dataset"></select></label>
       <label>Scheme <select id="f-scheme"></select></label>
       <label>Metric <select id="f-metric">
-        <option value="field_r2">Field R² (higher is better)</option>
-        <option value="field_rmse">Field RMSE, t/ha (lower is better)</option>
-        <option value="pixel_r2">Pixel R² (higher is better)</option>
-        <option value="pixel_rmse">Pixel RMSE, t/ha (lower is better)</option>
+        <option value="pooled_field_r2">Field R², pooled over folds (higher is better)</option>
+        <option value="field_r2">Field R², mean of folds (higher is better)</option>
+        <option value="field_rmse">Field RMSE, t/ha, mean of folds (lower is better)</option>
+        <option value="pooled_pixel_r2">Pixel R², pooled over folds (higher is better)</option>
+        <option value="pixel_r2">Pixel R², mean of folds (higher is better)</option>
+        <option value="pixel_rmse">Pixel RMSE, t/ha, mean of folds (lower is better)</option>
       </select></label>
       <label>Head (table) <select id="f-model"></select></label>
     </div>
@@ -96,7 +98,8 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
 
   <section class="card">
     <h2>Per subset</h2>
-    <p class="note">Each cell is the mean over folds; hover for ± std and fold count. Shading is a fixed scale for R²
+    <p class="note" id="metric-note"></p>
+    <p class="note">Each cell is one subset's score; hover for ± std over folds and fold count. Shading is a fixed scale for R²
       (0 to 1) and relative within the column for RMSE (darker is better). Click a header to sort.</p>
     <div class="table-wrap"><table id="table"></table></div>
   </section>
@@ -145,7 +148,10 @@ async function load() {
   fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))], d => d === "yieldsat" ? "YieldSAT" : d);
   fill("f-scheme", ["cv10", "loyo", "loro"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
   fill("f-model", HEAD_ORDER.filter(m => ROWS.some(r => r.model === m)), m => HEAD_LABEL[m] || m);
-  for (const id of ["f-dataset", "f-scheme", "f-metric", "f-model"]) document.getElementById(id).addEventListener("change", render);
+  for (const id of ["f-dataset", "f-metric", "f-model"]) document.getElementById(id).addEventListener("change", render);
+  document.getElementById("f-scheme").addEventListener("change", () => { defaultMetric(); render(); });
+  document.getElementById("f-metric").addEventListener("change", () => { metricTouched = true; });
+  defaultMetric();
   render();
 }
 function fill(id, values, text) {
@@ -155,11 +161,22 @@ function fill(id, values, text) {
 const val = id => document.getElementById(id).value;
 const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
 const lowerBetter = m => m.endsWith("rmse");
+// Pooled metrics are one value per run (all test predictions together); the others are the mean over folds.
+const get = (r, m) => m.startsWith("pooled_") ? r[m] : r[m + "_mean"];
+const POOLED_NOTE = "Pooled R² scores all held-out predictions of a run together. For leave one year or region out it is the " +
+  "fairer summary: R² within a single held-out year or region is measured against that fold's own mean, so a model that ranks " +
+  "fields well but misses the year's overall level gets a large negative score, and one bad fold dominates the mean.";
+let metricTouched = false;
+function defaultMetric() {
+  if (metricTouched) return;
+  document.getElementById("f-metric").value = val("f-scheme") === "cv10" ? "field_r2" : "pooled_field_r2";
+}
 const fmt = (m, v) => v == null || isNaN(v) ? "–" : v.toFixed(m.endsWith("r2") ? 3 : 2);
 
 function render() {
   const ds = val("f-dataset"), scheme = val("f-scheme"), metric = val("f-metric");
   const rows = ROWS.filter(r => r.dataset === ds && r.scheme === scheme);
+  document.getElementById("metric-note").textContent = metric.endsWith("r2") && scheme !== "cv10" ? POOLED_NOTE : "";
   renderChart(rows, metric);
   renderTable(rows.filter(r => r.model === val("f-model")), metric);
 }
@@ -178,8 +195,8 @@ function renderChart(rows, metric) {
   const pts = [];
   for (const i of inputs) for (const h of heads) {
     const rs = rows.filter(r => r.input === i && r.model === h && subsetsOf[i].includes(r.subset));
-    if (rs.length) pts.push({input: i, head: h, v: mean(rs.map(r => r[metric + "_mean"])), n: rs.length,
-      lo: Math.min(...rs.map(r => r[metric + "_mean"])), hi: Math.max(...rs.map(r => r[metric + "_mean"]))});
+    if (rs.length) pts.push({input: i, head: h, v: mean(rs.map(r => get(r, metric))), n: rs.length,
+      lo: Math.min(...rs.map(r => get(r, metric))), hi: Math.max(...rs.map(r => get(r, metric)))});
   }
   const best = i => { const ps = pts.filter(p => p.input === i).map(p => p.v); return ps.length ? (lowerBetter(metric) ? -Math.min(...ps) : Math.max(...ps)) : -Infinity; };
   inputs.sort((a, b) => best(b) - best(a));
@@ -233,11 +250,11 @@ function renderTable(rows, metric) {
   const data = inputs.map(i => {
     const o = {input: i, cells: {}};
     for (const s of subsets) { const r = rows.find(q => q.input === i && q.subset === s); if (r) o.cells[s] = r; }
-    const vs = Object.values(o.cells).map(r => r[metric + "_mean"]);
+    const vs = Object.values(o.cells).map(r => get(r, metric));
     o.mean = vs.length === subsets.length ? mean(vs) : NaN;
     return o;
   });
-  const key = r => sort.key === "input" ? label(r.input) : (sort.key === "mean" ? r.mean : (r.cells[sort.key] || {})[metric + "_mean"]);
+  const key = r => sort.key === "input" ? label(r.input) : (sort.key === "mean" ? r.mean : (r.cells[sort.key] ? get(r.cells[sort.key], metric) : undefined));
   const dir = sort.key === "input" ? 1 : (lowerBetter(metric) ? -sort.dir : sort.dir);
   data.sort((a, b) => { const x = key(a), y = key(b);
     if (typeof x === "string") return x.localeCompare(y) * sort.dir;
@@ -245,7 +262,7 @@ function renderTable(rows, metric) {
   const cols = ["input", ...subsets, "mean"];
   const arrow = c => sort.key === c ? ` <span class="arrow">${sort.dir === -1 ? "▾" : "▴"}</span>` : "";
   let h = `<thead><tr>${cols.map(c => `<th class="${c === "input" ? "l" : ""}" data-key="${c}">${c === "input" ? "Input" : c === "mean" ? "Mean" : c}${arrow(c)}</th>`).join("")}</tr></thead><tbody>`;
-  const colVals = c => data.map(d => c === "mean" ? d.mean : (d.cells[c] || {})[metric + "_mean"]).filter(v => v != null && !isNaN(v));
+  const colVals = c => data.map(d => c === "mean" ? d.mean : (d.cells[c] ? get(d.cells[c], metric) : undefined)).filter(v => v != null && !isNaN(v));
   const shade = (c, v) => {
     if (v == null || isNaN(v)) return "";
     let f;
@@ -257,8 +274,8 @@ function renderTable(rows, metric) {
   for (const d of data) {
     h += `<tr><td class="l">${label(d.input)}</td>`;
     for (const s of subsets) {
-      const r = d.cells[s]; const v = r ? r[metric + "_mean"] : NaN;
-      const tip = r ? `<b>${label(d.input)}</b> · ${s}<br>${fmt(metric, v)} ± ${fmt(metric, r[metric + "_std"])} over ${r.folds} folds<br>Pooled: ${fmt(metric, r["pooled_" + metric])} · ${r.n_features} features` : "";
+      const r = d.cells[s]; const v = r ? get(r, metric) : NaN;
+      const tip = r ? `<b>${label(d.input)}</b> · ${s}<br>${metric.startsWith("pooled_") ? `Pooled: ${fmt(metric, v)} · mean of folds: ${fmt(metric, r[metric.slice(7) + "_mean"])} ± ${fmt(metric, r[metric.slice(7) + "_std"])}` : `${fmt(metric, v)} ± ${fmt(metric, r[metric + "_std"])} · pooled: ${fmt(metric, r["pooled_" + metric])}`} over ${r.folds} folds · ${r.n_features} features` : "";
       h += `<td class="cell" style="${shade(s, v)}" data-tip="${tip.replace(/"/g, "&quot;")}">${fmt(metric, v)}</td>`;
     }
     h += `<td class="cell" style="${shade("mean", d.mean)}"><b>${fmt(metric, d.mean)}</b></td></tr>`;
