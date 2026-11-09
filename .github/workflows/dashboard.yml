@@ -20,13 +20,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Assemble site
         run: |
           mkdir -p _site/results
           cp dashboard/index.html _site/
           cp results/index.json _site/results/ 2>/dev/null || echo '{"updated": "never", "files": []}' > _site/results/index.json
-          for d in results/*/; do [ -d "$d" ] && cp -r "$d" _site/results/; done
+          for d in results/*/; do if [ -d "$d" ]; then cp -r "$d" _site/results/; fi; done
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
