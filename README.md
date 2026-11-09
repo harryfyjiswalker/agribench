@@ -105,8 +105,8 @@ predictions and the resolved config.
 |---|---|
 | `subset=` | `ARG-C`, `ARG-S`, `ARG-W`, `BRA-C`, `BRA-S`, `BRA-W`, `GER-R`, `GER-W`, `URG-S` (country–crop) |
 | `scheme=` | `cv10` (standard 10-fold), `loyo` (leave one year out), `loro` (leave one region out), `loco` (leave one country out, the final evaluation) |
-| `input=` | `s2` (Sentinel-2 only), `s2-adm` (plus weather, soil, topography, coordinates) |
-| `model=` | `mean` (reference), `ridge`, `rf`, `extra_trees`, `xgboost`, `lightgbm` |
+| `input=` | raw: `s2` (Sentinel-2 only), `s2-adm` (plus weather, soil, topography, coordinates); location: `latlon`, `mind`, `satclip`; foundation models: `galileo`, `aef` (AlphaEarth); or blocks joined with `+`, e.g. `galileo+mind` |
+| `model=` | `probe` (linear probe, the main head for comparing inputs), `lightgbm`, `tabpfn`, `tabicl` (GPU), `mean` (reference), `rf`, `extra_trees`, `xgboost` |
 
 - `scheme=loco` takes `crop=corn|soybean|wheat` instead of `subset=`. It needs `experiment.confirm_test=true`,
   and each run is logged in `$project/runs/yieldsat/loco-ledger.jsonl`. Pick models on the other schemes first.
@@ -114,6 +114,12 @@ predictions and the resolved config.
 - Each run writes `$project/runs/yieldsat/$USER/<time>-<jobid>/metrics.json`, with R² and RMSE at pixel and
   field level per fold, mean ± std over folds and pooled. It also saves per-pixel predictions and the tuning
   results.
+- For many runs at once, use the sweep tool. It runs folds as parallel Slurm array tasks with resources sized per
+  head, resumes where it stopped, and collects the results into `results/yieldsat/<sweep>.csv`:
+
+      python -m tools.sweep_yieldsat --name mysweep --inputs s2 galileo mind --models probe lightgbm
+
+- Results across all sweeps: the [results dashboard](https://harryfyjiswalker.github.io/agribench/).
 - How folds, tuning, the 256-pixel training cap and the metrics work: [protocols/yieldsat.md](protocols/yieldsat.md).
   Folds and feature caches are already built on Anunna; `prepare.sbatch` rebuilds them if needed.
 

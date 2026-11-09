@@ -9,6 +9,10 @@ inner folds are supplied by the runner (they mirror the outer scheme) and select
 The penalty is per training sample (loss = mean squared error + lam * ||w||^2), so the same grid means the same
 amount of shrinkage whatever the number of training pixels. One eigendecomposition of X'X per fold gives the
 solution for every lam at once, so the whole grid costs about one ridge fit.
+
+Z-scores are clipped to +/-10. Without this, a column that is nearly always missing in a training fold (a time
+slot few fields have an image in) gets a tiny standard deviation, ordinary test values in it become huge after
+scaling, and the linear prediction explodes (seen on 2026-11-09: field R2 of -2e7 on s2-adm).
 """
 import warnings
 
@@ -17,6 +21,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 
 DEFAULT_LAMBDAS = tuple(float(v) for v in np.logspace(-6, 3, 19))
 CHUNK = 32768
+Z_CLIP = 10.0  # z-scores are clipped to +/- this, in fitting and prediction alike
 
 
 def _stats(x, rows):
@@ -33,15 +38,20 @@ def _stats(x, rows):
 
 
 def _gram(x, y, rows, mean, std):
+    """Centred X'X and X'y of the clipped z-scores (centring keeps the intercept unpenalised)."""
     d = x.shape[1]
-    g, b = np.zeros((d, d)), np.zeros(d)
+    g, b, s = np.zeros((d, d)), np.zeros(d), np.zeros(d)
     ym = float(y[rows].mean())
     for a in range(0, len(rows), CHUNK):
         r = rows[a:a + CHUNK]
-        c = (x[r].astype(np.float64) - mean) / std
+        c = np.clip((x[r].astype(np.float64) - mean) / std, -Z_CLIP, Z_CLIP)
         g += c.T @ c
         b += c.T @ (y[r] - ym)
-    return g, b, ym
+        s += c.sum(0)
+    zm = s / len(rows)
+    g -= len(rows) * np.outer(zm, zm)
+    b -= zm * float((y[rows] - ym).sum())  # zero up to rounding
+    return g, b, ym, zm
 
 
 def _solve(g, b, n, lambdas):
@@ -52,11 +62,11 @@ def _solve(g, b, n, lambdas):
     return evecs @ (proj[:, None] / (evals[:, None] + n * np.asarray(lambdas)[None, :]))
 
 
-def _predict(x, rows, mean, std, w, intercept):
+def _predict(x, rows, mean, std, zm, w, intercept):
     out = []
     for a in range(0, len(rows), CHUNK):
-        c = (x[rows[a:a + CHUNK]].astype(np.float64) - mean) / std
-        out.append(c @ w + intercept)
+        c = np.clip((x[rows[a:a + CHUNK]].astype(np.float64) - mean) / std, -Z_CLIP, Z_CLIP)
+        out.append((c - zm) @ w + intercept)
     return np.concatenate(out)
 
 
@@ -79,9 +89,9 @@ class RidgeProbe(BaseEstimator, RegressorMixin):
             for tr, va in cv:
                 tr, va = np.asarray(tr), np.asarray(va)
                 mean, std = _stats(X, tr)
-                g, b, ym = _gram(X, y, tr, mean, std)
+                g, b, ym, zm = _gram(X, y, tr, mean, std)
                 w = _solve(g, b, len(tr), lambdas)
-                p = _predict(X, va, mean, std, w, ym)
+                p = _predict(X, va, mean, std, zm, w, ym)
                 err = ((p - y[va, None]) ** 2).mean(0)
                 per_fold.append(np.sqrt(err))
             rmse = np.mean(per_fold, axis=0)  # mean over folds of fold RMSE, as GridSearchCV would report
@@ -96,7 +106,7 @@ class RidgeProbe(BaseEstimator, RegressorMixin):
             self.best_score_ = None
         rows = np.arange(len(X))
         self.mean_, self.std_ = _stats(X, rows)
-        g, b, ym = _gram(X, y, rows, self.mean_, self.std_)
+        g, b, ym, self.zmean_ = _gram(X, y, rows, self.mean_, self.std_)
         self.coef_ = _solve(g, b, len(X), [self.lambda_])[:, 0]
         self.intercept_ = ym
         self.n_features_in_ = X.shape[1]
@@ -104,4 +114,5 @@ class RidgeProbe(BaseEstimator, RegressorMixin):
 
     def predict(self, X):
         X = np.asarray(X, dtype=np.float32)
-        return _predict(X, np.arange(len(X)), self.mean_, self.std_, self.coef_[:, None], self.intercept_)[:, 0]
+        return _predict(X, np.arange(len(X)), self.mean_, self.std_, self.zmean_, self.coef_[:, None],
+                        self.intercept_)[:, 0]

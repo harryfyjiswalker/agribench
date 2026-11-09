@@ -163,9 +163,16 @@ def inner_splits(scheme, attrs, train_fields_per_row, seed, n_train_countries):
 
 
 def git_commit(directory):
+    """The code version: a sweep's frozen code copy has a COMMIT file; a checkout asks git (marked if dirty)."""
+    stamp = Path(directory) / "COMMIT"
+    if stamp.exists():
+        return stamp.read_text().strip()
     try:
-        return subprocess.run(["git", "-C", str(directory), "rev-parse", "HEAD"], capture_output=True, text=True,
-                              check=True).stdout.strip()
+        sha = subprocess.run(["git", "-C", str(directory), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             check=True).stdout.strip()
+        dirty = subprocess.run(["git", "-C", str(directory), "status", "--porcelain", "--untracked-files=no"],
+                               capture_output=True, text=True).stdout.strip()
+        return sha + ("-dirty" if dirty else "")
     except Exception:
         return None
 

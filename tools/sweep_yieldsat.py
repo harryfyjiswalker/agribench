@@ -10,6 +10,10 @@ are skipped, so re-running the same command resumes a sweep. At most --max-runni
 (Anunna guidance: keep Lustre-heavy arrays at about 200). A final CPU job (afterany) combines the folds of every
 run and writes the public aggregate table results/yieldsat/<name>.csv.
 
+Every sweep submission runs from a frozen copy of the code at the checkout's HEAD commit
+(runs/yieldsat/sweeps/<name>/_code/<commit>/), so editing or pulling the checkout never changes tasks that are
+already queued, and every fold records the commit it ran with. The checkout must be clean.
+
 Resources per head are in RESOURCES below. Billing on Anunna is for what is *requested*, and FB-IT's efficiency
 score weighs the time limit most, so keep these close to measured use (tools/collect_yieldsat.py --efficiency).
 """
@@ -54,6 +58,25 @@ def width(spec):
     return n
 
 
+def frozen_code(checkout, runs_root, dry):
+    """Copy the checkout's HEAD into runs_root/_code/<commit>/ (git archive) and return that directory."""
+    git = ["git", "-C", str(checkout)]
+    if subprocess.run(git + ["status", "--porcelain", "--untracked-files=no"], capture_output=True,
+                      text=True).stdout.strip():
+        raise SystemExit("The checkout has uncommitted changes; commit them first (sweeps run from a commit).")
+    sha = subprocess.run(git + ["rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    code = runs_root / "_code" / sha
+    if not code.exists() and not dry:
+        tmp = runs_root / "_code" / f".{sha}.tmp"
+        tmp.mkdir(parents=True, exist_ok=True)
+        archive = subprocess.run(git + ["archive", "--format=tar", sha], capture_output=True, check=True).stdout
+        subprocess.run(["tar", "-x", "-C", str(tmp)], input=archive, check=True)
+        (tmp / "COMMIT").write_text(sha + "\n")
+        tmp.rename(code)
+    print(f"# code: {sha[:10]} -> {code}", flush=True)
+    return code
+
+
 def plan(args, runs_root):
     tasks = []
     for subset in args.subsets:
@@ -95,12 +118,13 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    repo = Path(__file__).resolve().parents[1]
+    checkout = Path(__file__).resolve().parents[1]
     runs_root = ys.PROJECT / "runs" / "yieldsat" / "sweeps" / args.name
     task_dir = runs_root / "_tasks"
     log_dir = runs_root / "_logs"
     for d in (task_dir, log_dir):
         d.mkdir(parents=True, exist_ok=True)
+    repo = frozen_code(checkout, runs_root, args.dry_run)
     widths = {spec: width(spec) for spec in args.inputs}
     tasks = plan(args, runs_root)
     if not tasks:
@@ -124,12 +148,12 @@ def main():
                f"--output={log_dir}/{tag}-%A_%a.log", "--partition=gpu" if res["gpu"] else "--partition=main"]
         if res["gpu"]:
             cmd.append("--gres=gpu:1")
-        cmd += [str(repo / "sweep.sbatch"), str(tfile)]
+        cmd += [f"--chdir={repo}", str(repo / "sweep.sbatch"), str(tfile)]
         print(f"# {tag}: {len(items)} tasks", flush=True)
         jobs.append(submit(cmd, args.dry_run))
     if jobs:
         dep = ["--dependency=afterany:" + ":".join(jobs)] if not args.dry_run else []
-        submit([f"{SLURM}/sbatch", "--parsable", *dep, f"--job-name=ys-{args.name}-collect",
+        submit([f"{SLURM}/sbatch", "--parsable", *dep, f"--job-name=ys-{args.name}-collect", f"--chdir={checkout}",
                 f"--output={log_dir}/collect-%j.log", "--time=00:30:00", "--mem=8G", "--cpus-per-task=1",
                 str(repo / "prepare.sbatch"), "tools.collect_yieldsat", "--sweep", args.name], args.dry_run)
     print(f"{len(tasks)} tasks in {len(groups)} arrays; outputs under {runs_root}")

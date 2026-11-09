@@ -57,6 +57,8 @@ def combine(out, require_complete=True):
                 raise ValueError(f"{out}: folds disagree on {key}")
         if f["provenance"]["fold_file_sha256"] != first["provenance"]["fold_file_sha256"]:
             raise ValueError(f"{out}: folds come from different fold files")
+        if f["provenance"].get("git_commit") != first["provenance"].get("git_commit"):
+            raise ValueError(f"{out}: folds were run with different code versions")
     per_fold = sorted((f["fold_result"] for f in folds), key=lambda r: r["fold"])
     expected = first["folds_in_scheme"]
     if require_complete and not first["smoke"] and len(per_fold) != expected:
