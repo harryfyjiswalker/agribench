@@ -62,8 +62,9 @@ def width(spec):
 def frozen_code(checkout, runs_root, dry):
     """Copy the checkout's HEAD into runs_root/_code/<commit>/ (git archive) and return that directory."""
     git = ["git", "-C", str(checkout)]
-    if subprocess.run(git + ["status", "--porcelain", "--untracked-files=no"], capture_output=True,
-                      text=True).stdout.strip():
+    # results/ is written by collect jobs and is not code, so it may differ from the commit.
+    if subprocess.run(git + ["status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude)results"],
+                      capture_output=True, text=True).stdout.strip():
         raise SystemExit("The checkout has uncommitted changes; commit them first (sweeps run from a commit).")
     sha = subprocess.run(git + ["rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
     code = runs_root / "_code" / sha
