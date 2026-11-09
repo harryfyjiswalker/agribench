@@ -219,6 +219,17 @@ Tabular heads get each pixel as a flat vector (24 × bands). The static bands ar
 times. Missing values stay NaN: heads that can't handle NaN get training-fold median imputation inside the
 pipeline, so nothing is fitted on test data.
 
+**Feature caches.** `tools/build_yieldsat_inputs.py` (run with `sbatch prepare.sbatch
+tools.build_yieldsat_inputs --country <Country>`) streams each country file once and writes, per subset, to
+`/lustre/shared/agriscience-benchmark/features/yieldsat/v1/`:
+- `<subset>.npy`: float32, pixels × 488;
+- `<subset>-meta.npz`: field, target, row/col and pixel UUID per row;
+- `<subset>.json`: feature names, the column lists for `s2` (288) and `s2-adm` (488), and provenance.
+
+Columns are the 16 time-varying bands at each of the 24 steps (`<band>_t<step>`), then the 104 static bands.
+S2 values of 65,535 become NaN. Caches are never overwritten. On Germany, every one of 12,000 spot-checked
+values matched the source file.
+
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
 
 The paper doesn't describe tuning. To keep it honest and the same for every head:
@@ -250,10 +261,12 @@ pixels within a field are strongly autocorrelated anyway.
 
 ### 2.8 Frozen fold files and provenance [AgriBench]
 
-- `tools/make_yieldsat_folds.py` (still to write) builds the field tables and writes
+- `tools/make_yieldsat_folds.py` builds the field table and writes
   `/lustre/shared/agriscience-benchmark/splits/yieldsat/<subset>/{cv10,loyo,loro}.csv` and
   `/lustre/shared/agriscience-benchmark/splits/yieldsat/loco/<crop>.csv`, with columns
-  `field_shared_name, fold`. It writes them once and refuses to overwrite.
+  `field_shared_name, fold`, plus `fields.csv` (with each field's region) and `manifest.json` (SHA-256 of
+  every file and of the code). It writes them once and refuses to overwrite. `--check` rebuilds them in
+  memory and confirms they match. **Frozen on 2026-11-09.**
 - Each run records the SHA-256 of its fold file, the input file and the config, as for PASTIS-R.
 - **Development:** CV10, LOYO and LORO are reported as cross-validation, like the paper. Model choices are
   made on CV10. LOYO and LORO are reported, not tuned on.
