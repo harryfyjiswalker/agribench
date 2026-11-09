@@ -1,6 +1,6 @@
 # PLANTEUR evaluation protocol
 
-Status: **draft 2026-11-09. Not downloaded, nothing run, decisions in section 5 still open.** This page sets how
+Status: **decisions D2–D7 agreed 2026-11-09; download scope (D1) still open; not downloaded, nothing run.** This page sets how
 every AgriBench model is scored on PLANTEUR, so results are comparable with the paper and with each other.
 Sections marked **[paper]** follow the authors exactly, citing the paper, the dataset card or the code. Sections
 marked **[AgriBench]** fill gaps the authors leave open, or go beyond them.
@@ -215,10 +215,9 @@ Martinique and Mayotte, and Guyane is mostly meadow and orchard (`:132-133`).
   This is the usual PASTIS / U-TAE convention.
 - **LOIO aggregate** [paper]: the unweighted mean of the 5 per-island mIoU-8 values. "Mean is across the 5
   folds" (paper Table 6). The paper doesn't pool pixels across islands.
-- **[AgriBench] extras, never ranked:**
-  - the standard deviation across the 5 islands;
-  - the mean over the 4 islands without Mayotte (2, item 7);
-  - per-class IoU for every fold.
+- **Reported exactly as the paper does** (D5): one value per island and the 5-island mean, Mayotte included.
+  No standard deviations and no extra means. Per-class IoU is saved in each run's `metrics.json` for
+  diagnosis, but it isn't on the leaderboard.
 
 ### 3.5 How the paper trains and selects [paper]
 
@@ -253,21 +252,32 @@ AgriBench heads are per-pixel tabular models: one row per labelled, non-void pix
 | `planteur/galileo-base`, `planteur/presto-base` | extracted by AgriBench from `DATA_S2_MONTHLY`, with the paper's settings (Galileo patch 4, window 16; Presto patch 1, window 16) | paper Table 2 frozen-encoder rows |
 | S1 and Landsat combinations | later | paper Table 3 |
 
-- **[AgriBench] normalisation:** fit inside the head's pipeline, on the training pixels of the current fold
-  only. AgriBench never uses `NORM_*_patch.json` for LOIO (2, item 2; D3).
-- **[AgriBench] tuning, replacing the paper's learning-rate sweep:**
-  1. Search the grid in the model's YAML on the fold's own `val` list (fold 4, or the LOIO fold's `val`).
-  2. Select by **mIoU-8** on val.
-  3. Refit the best setting on that fold's `train` only, as the paper does.
-  4. Score `test` once.
+- **[AgriBench] no leakage, anywhere** (D3). Every statistic a model uses is fitted on the training pixels of
+  the current fold only: input normalisation, imputation, and anything else fitted to data. The shipped
+  `NORM_*_patch.json` files are never used, on any split, because they include every island (2, item 2).
+  Selection uses only the fold's own `val` list, which never contains the held-out island or test patches.
+- **The linear probe follows the paper** (D4). This is the reference head, and the one the paper's numbers
+  compare with:
+  - one linear layer per pixel, trained with cross-entropy on **all** non-void training pixels of the fold,
+    with no cap and no class weighting (paper §3.1, and Table 8 keeps the default loss);
+  - 50 epochs;
+  - the learning rate chosen from an 8-point sweep from 10⁻⁴ to 0.5, by mIoU-8 on `val`, then that model
+    scores `test` once. Training is on `train` only.
 
-  For logistic regression this is the analogue of the paper's sweep: it tunes `C` instead of the learning
-  rate.
-- **[AgriBench] training-pixel cap** (D4). The default training fold has 31 million pixels. AgriBench samples
-  at most **256 non-void pixels per training patch**, uniformly, with the run's seed (about 485,000 rows).
-  Heads limited to small tables (TabPFN) are instead trained on the official **few-shot set with X = 1000
-  pixels per class** (`splits/fewshot_pixels.json`, `card:146-150`). Those results are labelled few-shot, and
-  compared with paper Table 7, not Table 2. Evaluation always uses **every** test pixel.
+  [AgriBench] Where the paper is silent, AgriBench uses 8 log-spaced points (`np.geomspace(1e-4, 0.5, 8)`),
+  AdamW, batches of 4,096 pixels, and the final-epoch weights. Features are standardised with training-fold
+  statistics.
+- **[AgriBench] other heads** (RF, XGBoost, LightGBM, MLP, TabPFN). The paper has no counterpart for these, so
+  they can't follow it exactly. They can't fit 31 million rows either. For these heads:
+  - training uses at most **256 non-void pixels per training patch**, sampled uniformly with seed 0 (about
+    485,000 rows on the default split);
+  - TabPFN, which is limited to small tables, trains on the official **few-shot set with X = 1000 pixels per
+    class** (`splits/fewshot_pixels.json`, `card:146-150`). Its results are labelled few-shot, and compared
+    with paper Table 7, not Table 2;
+  - the grid in the model's YAML is searched on the fold's `val` list by mIoU-8, and the best setting is refit
+    on `train` only.
+
+  Evaluation always uses **every** test pixel, for every head.
 - **[AgriBench] missing embeddings** (D7). Pixels with no embedding (2, item 9) are left out of training. At
   test time they are scored as Background, the trivial prediction, so every model is scored on the same pixels.
 
@@ -281,8 +291,8 @@ AgriBench heads are per-pixel tabular models: one row per labelled, non-void pix
   and is appended to `/lustre/shared/agriscience-benchmark/runs/planteur/test-ledger.jsonl`.
 - **Headline:** the **LOIO mean mIoU-8** (D2), matching the README's "Out-Of-Distribution" placement. The
   default-split test mIoU-8 is reported beside it.
-- **Seeds** (D5): stochastic heads run 3 seeds on each split. AgriBench reports the mean ± std over seeds
-  (`np.std`, ddof=0). The paper reports single runs, so its numbers compare with our mean.
+- **Single runs, as in the paper** (D5). Each configuration runs once per split, with seed 0 (the seed of the
+  official few-shot pixels). There is no ± in the tables.
 - **Provenance.** No fold files need building: the official `splits/443.json` and `splits/loio.json` are used
   as shipped. Each run records the SHA-256 of the split file (from `MANIFEST.sha256`), the input file and the
   config.
@@ -293,7 +303,8 @@ For each model × input × split (default, or LOIO island):
 
 - mIoU-8, OA and per-class IoU;
 - the number of training rows, and test patches and pixels;
-- the pixel cap or few-shot X, the seed, and the hashes of the split and input files.
+- the head's training regime (all pixels, 256-per-patch cap, or few-shot X), the chosen hyperparameters,
+  the seed, and the hashes of the split and input files.
 
 The leaderboard shows the LOIO table first (5 islands plus the mean, like paper Table 6), then the default-split
 table (like paper Table 2). Both include the trivial all-Background row.
@@ -339,22 +350,23 @@ pipeline before trying other heads.
 
 ---
 
-## 5. Decisions to confirm
+## 5. Decisions
 
-Recommended options first.
+Agreed on 2026-11-09:
 
-- **D1. Download scope.** Download everything, 258 GB (recommended). The shipped embeddings are exactly the
-  kind of input AgriBench compares, and the monthly mosaics feed Galileo and Presto. The alternative is core
-  only, 133 GB, with the rest added later.
-- **D2. Headline.** The LOIO mean mIoU-8 is the headline (recommended), with the default-split test beside it.
-  Both are treated as final tests with a ledger (3.7).
-- **D3. Normalisation for LOIO.** Fit on each fold's own training pixels (recommended). The alternative is the
-  shipped `NORM_*` files, which the authors say are not held out.
-- **D4. Training-pixel cap.** At most 256 non-void pixels per training patch. TabPFN-type heads use the
-  official X = 1000 few-shot set instead.
-- **D5. Seeds.** 3 seeds per configuration, reported as mean ± std. LOIO also gets the across-island std and a
-  no-Mayotte mean as unranked extras.
-- **D6. Parcel classification.** A parcel-level track like PASTIS-R, using `PLANTEUR_Dataset_PixelSet`,
-  could follow later. It is not in the paper, so there would be no reference numbers. It would also need a rule
-  for the 592 parcels that cross splits. Recommended: not now.
-- **D7. Missing embedding pixels.** Leave them out of training, and score them as Background at test time.
+- **D2. Headline:** the LOIO mean mIoU-8, with the default-split test beside it. Both are final tests with a
+  ledger (3.7).
+- **D3. No leakage:** every statistic is fitted on the fold's own training pixels. The shipped `NORM_*` files
+  are never used (3.6).
+- **D4. Training follows the authors:** the linear probe uses all training pixels with the paper's recipe.
+  Only heads the paper doesn't have get the 256-per-patch cap, and TabPFN gets the official few-shot set (3.6).
+- **D5. Reporting follows the authors:** single runs with seed 0. Tables show per-island values and the
+  5-island mean, Mayotte included, with no ± and no extra columns (3.4, 3.7).
+- **D6. Parcel classification:** not now. It isn't in the paper, so there would be no reference numbers.
+- **D7. Missing embedding pixels:** left out of training, and scored as Background at test time (3.6).
+
+Still open:
+
+- **D1. Download scope.** Everything is 258 GB; core only is 133 GB. Section 1 lists what each part holds. The
+  monthly mosaics and the embeddings are only in the full download, and they are the inputs most of the paper's
+  rows use.
