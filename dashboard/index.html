@@ -206,9 +206,10 @@ function renderChart(rows, metric) {
   const W = Math.max(svg.parentElement.clientWidth, 520), L = 220, R = 24, T = 28, rowH = 34, H = T + inputs.length * rowH + 8;
   svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   let lo = Math.min(...pts.map(p => p.v)), hi = Math.max(...pts.map(p => p.v));
-  if (metric.endsWith("r2")) { lo = Math.min(0, lo); hi = Math.max(hi, 0.2); } else { lo = 0; }
+  const R2_FLOOR = -1;  // R² below this is drawn at the left edge (value in the tooltip), so one outlier can't squash the axis
+  if (metric.endsWith("r2")) { lo = Math.max(R2_FLOOR, Math.min(0, lo)); hi = Math.max(hi, 0.2); } else { lo = 0; }
   const pad = (hi - lo) * 0.06 || 0.1; hi += pad;
-  const x = v => L + (v - lo) / (hi - lo) * (W - L - R);
+  const x = v => L + (Math.max(v, lo) - lo) / (hi - lo) * (W - L - R);
   let g = "";
   const ticks = niceTicks(lo, hi, 6);
   for (const t of ticks) g += `<line x1="${x(t)}" x2="${x(t)}" y1="${T - 6}" y2="${H - 8}" stroke="var(--grid)" stroke-width="1"/>` +
@@ -219,7 +220,8 @@ function renderChart(rows, metric) {
     g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${label(i)}${subsetsOf[i].length < allSubsets.length ? ` <tspan style="fill:var(--text-muted)">(${subsetsOf[i].length}/${allSubsets.length})</tspan>` : ""}</text>`;
     heads.forEach((h, k) => {
       const p = pts.find(q => q.input === i && q.head === h); if (!p) return;
-      const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${p.n} subsets: ${fmt(metric, p.v)}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}`;
+      const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${p.n} subsets: ${fmt(metric, p.v)}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}${p.v < lo ? "<br>Below the axis: drawn at its left edge" : ""}`;
+      if (p.v < lo) g += `<text x="${x(lo) + 10}" y="${y + 4}" style="fill:var(--text-muted)">◀ ${fmt(metric, p.v)}</text>`;
       g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">${marker(SHAPES[k], x(p.v), y, 5.5, `var(--series-${k + 1})`, true)}` +
            `<circle cx="${x(p.v)}" cy="${y}" r="12" fill="transparent"/></g>`;
     });
