@@ -24,12 +24,12 @@ def make_model():
     import torchgeo
     from torchgeo.models import DOFA
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = DOFA(img_size=SIZE, patch_size=TOKEN, embed_dim=768, depth=12, num_heads=12, global_pool=False)
+    net = DOFA(img_size=SIZE, patch_size=TOKEN, embed_dim=768, depth=12, num_heads=12, global_pool=True)
     missing, unexpected = net.load_state_dict(pe.load_state(WEIGHTS), strict=False)
-    if set(missing) - {"head.weight", "head.bias"} or unexpected:
+    if set(missing) - {"fc_norm.weight", "fc_norm.bias", "head.weight", "head.bias"} or unexpected:
         raise ValueError(f"DOFA weights: missing {missing}, unexpected {unexpected}")
     net = net.to(device).eval()
-    store = pe.capture_norm_output(net.norm)
+    store = pe.capture_output(net.blocks[-1])  # checkpoint has no final norm
 
     def encode(x, dates):
         net.forward_features(x, WAVELENGTH_UM)
@@ -41,7 +41,7 @@ def make_model():
                      "weights_url": "https://hf.co/torchgeo/dofa/resolve/b8db318b64a90b9e085ec04ba8851233c5893666/"
                                     "dofa_base_patch16_224-a0275954.pth"},
         "settings": {"modalities": "S2 L2A 12 bands", "normalization": "SSL4EO-S12 z-score",
-                     "wavelengths_um": WAVELENGTH_UM, "layer": "last block, final LayerNorm"}})
+                     "wavelengths_um": WAVELENGTH_UM, "layer": "last transformer block output (the checkpoint has no final norm)"}})
 
 
 if __name__ == "__main__":

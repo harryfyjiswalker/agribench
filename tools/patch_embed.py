@@ -209,8 +209,8 @@ def load_state(path):
     return torch.load(path, map_location="cpu", weights_only=True)
 
 
-def capture_norm_output(module):
-    """Forward hook storage: the full token sequence that passes through `module` (a final LayerNorm)."""
+def capture_output(module):
+    """Forward hook storage: the full token sequence that `module` (final norm or last block) outputs."""
     store = {}
     module.register_forward_hook(lambda m, i, o: store.__setitem__("x", o))
     return store

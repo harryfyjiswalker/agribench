@@ -30,12 +30,12 @@ def make_model():
     import torchgeo
     from torchgeo.models import CopernicusFM
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = CopernicusFM(embed_dim=768, depth=12, num_heads=12, global_pool=False)
+    net = CopernicusFM(embed_dim=768, depth=12, num_heads=12, global_pool=True)
     missing, unexpected = net.load_state_dict(pe.load_state(WEIGHTS), strict=False)
-    if set(missing) - {"head.weight", "head.bias"} or unexpected:
+    if set(missing) - {"fc_norm.weight", "fc_norm.bias", "head.weight", "head.bias"} or unexpected:
         raise ValueError(f"Copernicus-FM weights: missing {missing}, unexpected {unexpected}")
     net = net.to(device).eval()
-    store = pe.capture_norm_output(net.norm)
+    store = pe.capture_output(net.blocks[-1])  # checkpoint has no final norm
 
     def encode(x, dates):
         days = torch.tensor([(d - EPOCH).days for d in dates], dtype=x.dtype, device=x.device)
@@ -53,7 +53,7 @@ def make_model():
         "settings": {"modalities": "S2 L2A 12 bands (no S1 in YieldSAT)", "normalization": "SSL4EO-S12 z-score",
                      "wavelengths_nm": pe.WAVELENGTH_NM, "bandwidths_nm": pe.BANDWIDTH_NM,
                      "metadata": "date (days since 1970) and window area given; lon/lat withheld (NaN)",
-                     "layer": "last block, final LayerNorm"}})
+                     "layer": "last transformer block output (the checkpoint has no final norm)"}})
 
 
 if __name__ == "__main__":
