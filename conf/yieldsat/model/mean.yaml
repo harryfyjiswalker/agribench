@@ -1,0 +1,6 @@
+# Reference row: predict the training mean everywhere (protocols/yieldsat.md 2.3b).
+name: mean
+impute: false
+estimator:
+  _target_: sklearn.dummy.DummyRegressor
+  strategy: mean

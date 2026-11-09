@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgriBench Results</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f4f2; --surface-1: #fcfcfb; --border: #e2e1dc; --grid: #ecebe7;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #85847f;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --seq-0: #f1f6fd; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5; --seq-5: #256abf; --seq-6: #184f95;
+  --accent: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --seq-0: #1d2633; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #184f95; --seq-4: #256abf; --seq-5: #3987e5; --seq-6: #6da7ec;
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --seq-0: #1d2633; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #184f95; --seq-4: #256abf; --seq-5: #3987e5; --seq-6: #6da7ec;
+  --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+h2 { font-size: 18px; margin: 0 0 4px; }
+.lede { color: var(--text-secondary); margin: 0 0 20px; max-width: 70ch; }
+.meta { color: var(--text-muted); font-size: 13px; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 16px 0; }
+.note { color: var(--text-secondary); font-size: 13.5px; margin: 0 0 12px; max-width: 80ch; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; }
+.filters label { display: flex; flex-direction: column; font-size: 12px; color: var(--text-secondary); gap: 4px; }
+select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-1); color: var(--text-primary); min-width: 140px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--text-secondary); margin: 8px 0 4px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+svg text { fill: var(--text-secondary); font-size: 12px; }
+.chart-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; border-radius: 8px; }
+table { border-collapse: separate; border-spacing: 0; font-size: 13.5px; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); }
+th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 600; cursor: pointer; user-select: none; }
+th:hover { color: var(--text-primary); }
+th.l, td.l { text-align: left; }
+td.cell { border-left: 2px solid var(--surface-1); }
+th .arrow { color: var(--accent); }
+.empty { color: var(--text-muted); padding: 24px 0; }
+#tip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+  display: none; max-width: 280px; z-index: 10; }
+#tip b { font-weight: 600; }
+a { color: var(--accent); }
+footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>AgriBench results</h1>
+  <p class="lede">Frozen feature representations (raw inputs, location encoders, geospatial foundation models) scored under
+    each dataset's official cross-validation, with a fixed set of heads. Leave-one-year-out and leave-one-region-out default to R² pooled over folds.</p>
+  <p class="meta" id="meta">Loading results…</p>
+
+  <section class="card">
+    <div class="filters">
+      <label>Dataset <select id="f-dataset"></select></label>
+      <label>Scheme <select id="f-scheme"></select></label>
+      <label>Metric <select id="f-metric">
+        <option value="pooled_field_r2">Field R², pooled over folds (higher is better)</option>
+        <option value="field_r2">Field R², mean of folds (higher is better)</option>
+        <option value="field_rmse">Field RMSE, t/ha, mean of folds (lower is better)</option>
+        <option value="pooled_pixel_r2">Pixel R², pooled over folds (higher is better)</option>
+        <option value="pixel_r2">Pixel R², mean of folds (higher is better)</option>
+        <option value="pixel_rmse">Pixel RMSE, t/ha, mean of folds (lower is better)</option>
+      </select></label>
+      <label>Head (table) <select id="f-model"></select></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Which representation works best?</h2>
+    <p class="note" id="chart-note">Mean over subsets that have a result for every head shown. Hover a marker for the per-subset spread.</p>
+    <div class="legend" id="legend"></div>
+    <div class="chart-wrap"><svg id="chart" role="img" aria-label="Score by input and head"></svg></div>
+  </section>
+
+  <section class="card">
+    <h2>Per subset</h2>
+    <p class="note" id="metric-note"></p>
+    <p class="note">Each cell is one subset's score; hover for ± std over folds and fold count. Shading is a fixed scale for R²
+      (0 to 1) and relative within the column for RMSE (darker is better). Click a header to sort.</p>
+    <div class="table-wrap"><table id="table"></table></div>
+  </section>
+
+  <footer>
+    Protocols: <a href="https://github.com/harryfyjiswalker/agribench/blob/main/protocols/yieldsat.md">YieldSAT</a> ·
+    Code and raw tables: <a href="https://github.com/harryfyjiswalker/agribench">github.com/harryfyjiswalker/agribench</a>
+    (<code>results/</code>). Leave-one-country-out (the final evaluation) is reported separately once models are chosen.
+  </footer>
+</main>
+<div id="tip" role="tooltip"></div>
+<script>
+const HEAD_ORDER = ["probe", "lightgbm", "tabpfn", "tabicl", "rf", "xgboost", "extra_trees", "mean"];
+const HEAD_LABEL = {probe: "Linear probe", lightgbm: "LightGBM", tabpfn: "TabPFN", tabicl: "TabICL", rf: "Random forest",
+  xgboost: "XGBoost", extra_trees: "Extra trees", mean: "Mean baseline"};
+const SHAPES = ["circle", "square", "diamond", "triangle"];
+const SCHEME_LABEL = {cv10: "Random 10-fold (grouped by field)", loyo: "Leave one year out", loro: "Leave one region out", loco: "Leave one country out"};
+const INPUT_LABEL = {"s2": "Raw S2", "s2-adm": "Raw S2 + weather, soil, topo", latlon: "Lat/lon", mind: "MIND", satclip: "SatCLIP",
+  "s2-aligned": "S2 aligned to sowing", "s2-gdd": "S2 on thermal time", "s2-harmonic": "S2 harmonics", biophys: "Biophysical (SNAP)", arcvae: "ARC-VAE", galileo: "Galileo", aef: "AlphaEarth", tessera: "TESSERA"};
+const label = s => s.split("+").map(b => INPUT_LABEL[b] || b).join(" + ");
+let ROWS = [];
+let sort = {key: "mean", dir: -1};
+
+async function fetchFirst(paths) {
+  for (const p of paths) { try { const r = await fetch(p, {cache: "no-store"}); if (r.ok) return {r, base: p}; } catch (e) {} }
+  return null;
+}
+function parseCSV(text) {
+  const [head, ...lines] = text.trim().split(/\r?\n/);
+  const cols = head.split(",");
+  return lines.filter(Boolean).map(l => { const v = l.split(","); const o = {};
+    cols.forEach((c, i) => { const x = v[i]; o[c] = x !== "" && !isNaN(+x) && !["subset","scheme","input","model","dataset","git_commit","sweep"].includes(c) ? +x : x; });
+    return o; });
+}
+async function load() {
+  const idx = await fetchFirst(["results/index.json", "../results/index.json"]);
+  if (!idx) { document.getElementById("meta").textContent = "No results published yet."; return; }
+  const index = await idx.r.json();
+  const root = idx.base.replace(/index\.json$/, "");
+  for (const f of index.files) {
+    const r = await fetch(root + f.path, {cache: "no-store"});
+    if (r.ok) ROWS.push(...parseCSV(await r.text()));
+  }
+  document.getElementById("meta").textContent =
+    `${ROWS.length} runs · updated ${index.updated} · sweeps: ${[...new Set(ROWS.map(r => r.sweep))].join(", ")}`;
+  fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))], d => d === "yieldsat" ? "YieldSAT" : d);
+  fill("f-scheme", ["cv10", "loyo", "loro"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
+  fill("f-model", HEAD_ORDER.filter(m => ROWS.some(r => r.model === m)), m => HEAD_LABEL[m] || m);
+  for (const id of ["f-dataset", "f-metric", "f-model"]) document.getElementById(id).addEventListener("change", render);
+  document.getElementById("f-scheme").addEventListener("change", () => { defaultMetric(); render(); });
+  document.getElementById("f-metric").addEventListener("change", () => { metricTouched = true; });
+  defaultMetric();
+  render();
+}
+function fill(id, values, text) {
+  const s = document.getElementById(id);
+  s.innerHTML = values.map(v => `<option value="${v}">${text(v)}</option>`).join("");
+}
+const val = id => document.getElementById(id).value;
+const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+const lowerBetter = m => m.endsWith("rmse");
+// Pooled metrics are one value per run (all test predictions together); the others are the mean over folds.
+const get = (r, m) => m.startsWith("pooled_") ? r[m] : r[m + "_mean"];
+const POOLED_NOTE = "Pooled R² scores all held-out predictions of a run together. For leave one year or region out it is the " +
+  "fairer summary: R² within a single held-out year or region is measured against that fold's own mean, so a model that ranks " +
+  "fields well but misses the year's overall level gets a large negative score, and one bad fold dominates the mean.";
+let metricTouched = false;
+function defaultMetric() {
+  if (metricTouched) return;
+  document.getElementById("f-metric").value = val("f-scheme") === "cv10" ? "field_r2" : "pooled_field_r2";
+}
+const fmt = (m, v) => v == null || isNaN(v) ? "–" : v.toFixed(m.endsWith("r2") ? 3 : 2);
+
+function render() {
+  const ds = val("f-dataset"), scheme = val("f-scheme"), metric = val("f-metric");
+  const rows = ROWS.filter(r => r.dataset === ds && r.scheme === scheme);
+  document.getElementById("metric-note").textContent = metric.endsWith("r2") && scheme !== "cv10" ? POOLED_NOTE : "";
+  renderChart(rows, metric);
+  renderTable(rows.filter(r => r.model === val("f-model")), metric);
+}
+
+function renderChart(rows, metric) {
+  const svg = document.getElementById("chart");
+  const heads = HEAD_ORDER.filter(m => m !== "mean" && rows.some(r => r.model === m)).slice(0, 4);
+  const inputs = [...new Set(rows.map(r => r.input))];
+  // Per input: only the subsets every head with results for that input has, so heads compare on equal terms.
+  const allSubsets = [...new Set(rows.map(r => r.subset))];
+  const subsetsOf = {};
+  for (const i of inputs) {
+    const hs = heads.filter(h => rows.some(r => r.input === i && r.model === h));
+    subsetsOf[i] = allSubsets.filter(s => hs.every(h => rows.some(r => r.input === i && r.model === h && r.subset === s)));
+  }
+  const pts = [];
+  for (const i of inputs) for (const h of heads) {
+    const rs = rows.filter(r => r.input === i && r.model === h && subsetsOf[i].includes(r.subset));
+    if (rs.length) pts.push({input: i, head: h, v: mean(rs.map(r => get(r, metric))), n: rs.length,
+      lo: Math.min(...rs.map(r => get(r, metric))), hi: Math.max(...rs.map(r => get(r, metric)))});
+  }
+  const best = i => { const ps = pts.filter(p => p.input === i).map(p => p.v); return ps.length ? (lowerBetter(metric) ? -Math.min(...ps) : Math.max(...ps)) : -Infinity; };
+  inputs.sort((a, b) => best(b) - best(a));
+  document.getElementById("legend").innerHTML = heads.map((h, k) =>
+    `<span><svg width="14" height="14">${marker(SHAPES[k], 7, 7, 5, `var(--series-${k + 1})`)}</svg>${HEAD_LABEL[h] || h}</span>`).join("");
+  if (!pts.length) { svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">No results for this selection yet.</text>`; return; }
+  const W = Math.max(svg.parentElement.clientWidth, 520), L = 220, R = 24, T = 28, rowH = 34, H = T + inputs.length * rowH + 8;
+  svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  let lo = Math.min(...pts.map(p => p.v)), hi = Math.max(...pts.map(p => p.v));
+  const R2_FLOOR = -1;  // R² below this is drawn at the left edge (value in the tooltip), so one outlier can't squash the axis
+  if (metric.endsWith("r2")) { lo = Math.max(R2_FLOOR, Math.min(0, lo)); hi = Math.max(hi, 0.2); } else { lo = 0; }
+  const pad = (hi - lo) * 0.06 || 0.1; hi += pad;
+  const x = v => L + (Math.max(v, lo) - lo) / (hi - lo) * (W - L - R);
+  let g = "";
+  const ticks = niceTicks(lo, hi, 6);
+  for (const t of ticks) g += `<line x1="${x(t)}" x2="${x(t)}" y1="${T - 6}" y2="${H - 8}" stroke="var(--grid)" stroke-width="1"/>` +
+    `<text x="${x(t)}" y="${T - 12}" text-anchor="middle">${fmt(metric, t)}</text>`;
+  inputs.forEach((i, r) => {
+    const y = T + r * rowH + rowH / 2;
+    g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--grid)" stroke-width="1" stroke-dasharray="2 4"/>`;
+    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${label(i)}${subsetsOf[i].length < allSubsets.length ? ` <tspan style="fill:var(--text-muted)">(${subsetsOf[i].length}/${allSubsets.length})</tspan>` : ""}</text>`;
+    heads.forEach((h, k) => {
+      const p = pts.find(q => q.input === i && q.head === h); if (!p) return;
+      const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${p.n} subsets: ${fmt(metric, p.v)}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}${p.v < lo ? "<br>Below the axis: drawn at its left edge" : ""}`;
+      if (p.v < lo) g += `<text x="${x(lo) + 10}" y="${y + 4}" style="fill:var(--text-muted)">◀ ${fmt(metric, p.v)}</text>`;
+      g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">${marker(SHAPES[k], x(p.v), y, 5.5, `var(--series-${k + 1})`, true)}` +
+           `<circle cx="${x(p.v)}" cy="${y}" r="12" fill="transparent"/></g>`;
+    });
+  });
+  svg.innerHTML = g;
+  document.getElementById("chart-note").textContent =
+    `Mean of the per-subset scores. For each input, only subsets that every shown head has are used; (k/${allSubsets.length}) marks an input with results on k subsets so far. Hover a marker for the spread across subsets.`;
+  svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
+}
+function marker(shape, cx, cy, r, color, ring) {
+  const s = ring ? `stroke="var(--surface-1)" stroke-width="2"` : "";
+  if (shape === "square") return `<rect x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}" rx="1.5" fill="${color}" ${s}/>`;
+  if (shape === "diamond") return `<polygon points="${cx},${cy - r * 1.25} ${cx + r * 1.25},${cy} ${cx},${cy + r * 1.25} ${cx - r * 1.25},${cy}" fill="${color}" ${s}/>`;
+  if (shape === "triangle") return `<polygon points="${cx},${cy - r * 1.2} ${cx + r * 1.15},${cy + r * 0.9} ${cx - r * 1.15},${cy + r * 0.9}" fill="${color}" ${s}/>`;
+  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" ${s}/>`;
+}
+function niceTicks(lo, hi, n) {
+  const step0 = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0);
+  const out = []; for (let t = Math.ceil(lo / step) * step; t <= hi + 1e-9; t += step) out.push(+t.toFixed(10)); return out;
+}
+
+function renderTable(rows, metric) {
+  const t = document.getElementById("table");
+  if (!rows.length) { t.innerHTML = `<tr><td class="empty l">No results for this head and scheme yet.</td></tr>`; return; }
+  const subsets = [...new Set(rows.map(r => r.subset))].sort();
+  const inputs = [...new Set(rows.map(r => r.input))];
+  const data = inputs.map(i => {
+    const o = {input: i, cells: {}};
+    for (const s of subsets) { const r = rows.find(q => q.input === i && q.subset === s); if (r) o.cells[s] = r; }
+    const vs = Object.values(o.cells).map(r => get(r, metric));
+    o.mean = vs.length === subsets.length ? mean(vs) : NaN;
+    return o;
+  });
+  const key = r => sort.key === "input" ? label(r.input) : (sort.key === "mean" ? r.mean : (r.cells[sort.key] ? get(r.cells[sort.key], metric) : undefined));
+  const dir = sort.key === "input" ? 1 : (lowerBetter(metric) ? -sort.dir : sort.dir);
+  data.sort((a, b) => { const x = key(a), y = key(b);
+    if (typeof x === "string") return x.localeCompare(y) * sort.dir;
+    if (x == null || isNaN(x)) return 1; if (y == null || isNaN(y)) return -1; return (y - x) * dir; });
+  const cols = ["input", ...subsets, "mean"];
+  const arrow = c => sort.key === c ? ` <span class="arrow">${sort.dir === -1 ? "▾" : "▴"}</span>` : "";
+  let h = `<thead><tr>${cols.map(c => `<th class="${c === "input" ? "l" : ""}" data-key="${c}">${c === "input" ? "Input" : c === "mean" ? "Mean" : c}${arrow(c)}</th>`).join("")}</tr></thead><tbody>`;
+  const colVals = c => data.map(d => c === "mean" ? d.mean : (d.cells[c] ? get(d.cells[c], metric) : undefined)).filter(v => v != null && !isNaN(v));
+  const shade = (c, v) => {
+    if (v == null || isNaN(v)) return "";
+    let f;
+    if (metric.endsWith("r2")) f = Math.max(0, Math.min(1, v));
+    else { const vs = colVals(c), mn = Math.min(...vs), mx = Math.max(...vs); f = mx > mn ? (mx - v) / (mx - mn) : 0.5; }
+    const step = Math.round(f * 6);
+    return `background: var(--seq-${step}); color: ${step >= 4 ? "#fff" : "var(--text-primary)"};`;
+  };
+  for (const d of data) {
+    h += `<tr><td class="l">${label(d.input)}</td>`;
+    for (const s of subsets) {
+      const r = d.cells[s]; const v = r ? get(r, metric) : NaN;
+      const tip = r ? `<b>${label(d.input)}</b> · ${s}<br>${metric.startsWith("pooled_") ? `Pooled: ${fmt(metric, v)} · mean of folds: ${fmt(metric, r[metric.slice(7) + "_mean"])} ± ${fmt(metric, r[metric.slice(7) + "_std"])}` : `${fmt(metric, v)} ± ${fmt(metric, r[metric + "_std"])} · pooled: ${fmt(metric, r["pooled_" + metric])}`} over ${r.folds} folds · ${r.n_features} features` : "";
+      h += `<td class="cell" style="${shade(s, v)}" data-tip="${tip.replace(/"/g, "&quot;")}">${fmt(metric, v)}</td>`;
+    }
+    h += `<td class="cell" style="${shade("mean", d.mean)}"><b>${fmt(metric, d.mean)}</b></td></tr>`;
+  }
+  t.innerHTML = h + "</tbody>";
+  t.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    const k = th.dataset.key; sort = {key: k, dir: sort.key === k ? -sort.dir : (k === "input" ? 1 : -1)}; render(); }));
+  t.querySelectorAll("td[data-tip]").forEach(td => td.dataset.tip && hover(td, td.dataset.tip));
+}
+function hover(el, html) {
+  const tip = document.getElementById("tip");
+  el.addEventListener("mousemove", e => { tip.innerHTML = html; tip.style.display = "block";
+    const w = tip.offsetWidth; tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + "px"; tip.style.top = (e.clientY + 14) + "px"; });
+  el.addEventListener("mouseleave", () => tip.style.display = "none");
+}
+addEventListener("resize", () => ROWS.length && render());
+load();
+</script>
+</body>
+</html>

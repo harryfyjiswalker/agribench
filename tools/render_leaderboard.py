@@ -1,11 +1,9 @@
-"""Render the validation leaderboard in both Markdown pages."""
+"""Render the PASTIS-R pilot leaderboard into LEADERBOARD.md (the README no longer holds per-dataset tables)."""
 
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-START = "<!-- leaderboard:start -->"
-END = "<!-- leaderboard:end -->"
 
 
 def render(results):
@@ -47,11 +45,4 @@ def render(results):
 if __name__ == "__main__":
     data = [json.loads(path.read_text()) for path in sorted((ROOT / "results").glob("*.json"))]
     table = render(data)
-    readme = ROOT / "README.md"
-    source = readme.read_text()
-    before, start, section = source.partition(START)
-    _, end, after = section.partition(END)
-    if not start or not end or source.count(START) != 1 or source.count(END) != 1:
-        raise ValueError("README.md must contain one ordered pair of leaderboard markers")
-    readme.write_text(f"{before}{start}\n\n{table}\n\n{end}{after}")
     (ROOT / "LEADERBOARD.md").write_text(f"# PASTIS-R parcel leaderboard\n\n{table}\n")

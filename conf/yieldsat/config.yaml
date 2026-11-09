@@ -1,0 +1,27 @@
+# YieldSAT runner config (protocols/yieldsat.md). Choose a subset or crop, a scheme, an input and a model:
+#   sbatch yieldsat.sbatch subset=ARG-S scheme=cv10 input=s2 model=rf
+#   sbatch yieldsat.sbatch crop=soybean scheme=loco input=s2 model=rf experiment.confirm_test=true
+defaults:
+  - model: rf
+  - _self_
+subset: null        # ARG-C ARG-S ARG-W BRA-C BRA-S BRA-W GER-R GER-W URG-S  (cv10, loyo, loro)
+crop: null          # corn soybean wheat                                    (loco)
+scheme: cv10        # cv10 | loyo | loro | loco
+input: s2           # s2 | s2-adm | s2-aligned | s2-gdd | s2-harmonic | biophys | arcvae | latlon | mind | satclip | galileo | aef | tessera, or joined with + (e.g. galileo+mind)
+paths:
+  project: ${oc.env:AGRIBENCH_PROJECT,/lustre/shared/agriscience-benchmark}
+  features: ${oc.env:AGRIBENCH_YIELDSAT_FEATURES,${paths.project}/features/yieldsat}   # v1/ cache + representation folders
+  splits: ${paths.project}/splits/yieldsat
+  runs: ${oc.env:AGRIBENCH_RUNS,${paths.project}/runs/yieldsat}
+experiment:
+  seed: 42
+  pixel_cap: 256        # training pixels per field (2.7); evaluation always uses every pixel
+  smoke: false          # plumbing check: 2 folds, 16 px/field, 200 test px/field, shrunken grid
+  confirm_test: false   # required for scheme=loco (the final evaluation, 2.3b)
+  predict_batch: 200000
+  fold: null            # run one outer fold only (parallel sweeps); null = all folds
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${paths.runs}/${oc.env:USER}/${now:%Y%m%d-%H%M%S}-${oc.env:SLURM_JOB_ID,local}

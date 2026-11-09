@@ -95,13 +95,10 @@ The paper's "S2" input is the 12 S2 bands. Its "S2 + ADM" input is all bands. Th
 4. **Values of 65,535** appear in the S2 band maxima of Argentina, Brazil and Uruguay. They are saturated or
    nodata values and are treated as missing.
 5. **The 24 time steps are not calendar-aligned.** Each field's observations sit in a block of the 24 slots,
-   padded with NaN on both sides. In the rows checked, `times` counts days from the field's first slot, so the
-   file-level `units` attribute ("days since <date>") looks misleading. This will be confirmed when the input
-   builder is written.
-6. **Admin unit names are spelled inconsistently** (e.g. `Santa Fe` and `Santa_Fe`). Don't group by them
-   without cleaning.
-7. **The raw weather CSV has 10 variables, but the preprocessed file keeps 4.** Wind, humidity, radiation and
-   dew point are only in `Raw/`.
+   padded with NaN on both sides. `times` holds each slot's date as days since one reference date per country
+   file, exactly as the CF `units` attribute says (e.g. "days since 2019-09-22" for Germany), so offsets can be
+   negative. (An earlier version of this note called the attribute misleading; that was wrong. Checked on
+   2026-11-09: reference + offset falls on the Raw S2 acquisition dates.)
 
 ---
 
@@ -213,7 +210,18 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 |---|---|---|
 | `yieldsat/s2` | 12 S2 bands × 24 steps | the paper's "Sentinel-2" rows |
 | `yieldsat/s2-adm` | all 120 bands × 24 steps | the paper's "S2 + ADM, input fusion" rows |
-| embeddings, location encoders, crop-model outputs | from extracted feature tables, keyed by pixel `index` | AgriBench additions |
+| `latlon` | pixel latitude, longitude (WGS84) | AgriBench: plain-coordinate control for the location encoders |
+| `mind` | MIND location encoder, 3072-d (Corley et al. 2026) | AgriBench |
+| `satclip` | SatCLIP ViT16-L40 location encoder, 256-d (Klemmer et al.) | AgriBench |
+| `galileo` | Galileo-Base, 768-d, from the pixel's S2 series | AgriBench |
+| `aef` | AlphaEarth Foundations annual embedding, 64-d | AgriBench |
+| `tessera` | TESSERA annual embedding, 128-d | AgriBench |
+| `s2-aligned` | 12 S2 bands interpolated onto a fixed grid of days since sowing (every 15 days) | AgriBench: season-aligned version of `s2` |
+| `s2-gdd` | 12 S2 bands interpolated onto a fixed grid of growing degree days since sowing | AgriBench: thermal-time version of `s2-aligned` |
+| `s2-harmonic` | per band, 5 harmonic-regression coefficients (2 harmonics) over days since sowing | AgriBench: compact gap-robust summary |
+| `biophys` | LAI, FAPAR, FCOVER, canopy chlorophyll, canopy water (SNAP S2 biophysical processor) on days since sowing | AgriBench: physically based canopy variables |
+| `arcvae` | 11 ARC crop-model parameters (canopy scaling and phenology timing), posterior mean and SD from ARC-VAE | AgriBench, internal testing: physics-guided season summary |
+| combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
 times. Missing values stay NaN: heads that can't handle NaN get training-fold median imputation inside the
@@ -230,7 +238,81 @@ Columns are the 16 time-varying bands at each of the 24 steps (`<band>_t<step>`)
 S2 values of 65,535 become NaN. Caches are never overwritten. On Germany, every one of 12,000 spot-checked
 values matched the source file.
 
+**Representation caches** (2026-11-09). Every representation lives in its own folder under
+`features/yieldsat/`, with rows aligned to `v1/<subset>-meta.npz` (each `<subset>.json` stores that file's
+SHA-256 and the runner refuses a mismatch):
+
+- `latlon/` (`tools/build_yieldsat_latlon.py`): the preprocessed file has no usable coordinates (`coord_x/y/z`
+  are a transformed version), so each pixel centre (row + 0.5, col + 0.5) is mapped through its field's Raw S2
+  GeoTIFF transform and reprojected to WGS84. Check: every field's mean pixel position lies within 1 km of the
+  metadata centroid (worst case 0.95 km, in ARG-W, where yield maps cover only part of some fields; Brazil and
+  Germany are within 90 m).
+- `mind/`, `satclip/` (`tools/embed_yieldsat_location.py`): location encoders only see coordinates, so pixels
+  are snapped to a 0.001° grid (about 110 × 70 m), each of the 73k occupied cells is embedded once, and pixels
+  index into that table. MIND uses its full 3072-d trunk features (upstream eb25937, weights
+  `taylor-geospatial/MIND@1437c4d`); SatCLIP uses the location encoder of `microsoft/SatCLIP-ViT16-L40`.
+  Neither takes a date, so a location gets the same embedding in every year.
+- `galileo/` (`tools/embed_yieldsat_galileo.py`): Galileo-Base on each pixel's 24-slot S2 series as a 1 × 1
+  time series (the 10 S2 bands Galileo knows, plus NDVI), with each slot's month token taken from
+  the file's time reference + slot offset (checked against the Raw S2 acquisition dates on 25 fields per subset). Weather,
+  topography and location are left out on purpose, so `galileo` is comparable to `s2` and location only enters
+  through the location encoders. Mean of the encoder's tokens (Galileo `average_tokens`), 768-d.
+- `aef/` (`tools/extract_yieldsat_aef.py`): the 64-d AlphaEarth annual embedding of the calendar year of the
+  field's harvest date, read with HTTP range requests from the Source Cooperative mirror. AEF starts in 2017,
+  so the 48 German fields harvested in 2016 have no AEF value (imputed by the runner, and counted in the json).
+- `s2-aligned/` (`tools/build_yieldsat_s2_aligned.py`) [AgriBench]: the raw `s2` slots are not tied to the season
+  (1, note 5). Checked on 2026-11-09: in BRA-C, slot 12 is 30 days before sowing in 2017 but 77 days after it in
+  2023; in ARG-C it is about 110 days after sowing in most years but 24–42 days in 2021 and 2023. A model that
+  learns from slot positions can then misread a new year, which matters for LOYO (not for CV10, where test
+  fields share years with training fields). `s2-aligned` puts each pixel's series on one axis, days since the
+  field's sowing date: per pixel and band, linear interpolation between its valid observations onto -15, 0, 15,
+  … days, up to the subset's 95th percentile of the last observation day (capped at 330). Grid points outside
+  the pixel's observed range stay NaN. Only the sowing date is used, never the harvest date or yield. It is an
+  extra input beside `s2`, not a replacement, so the paper's input is still reported as the paper defines it.
+- `s2-gdd/` (`tools/build_yieldsat_s2_gdd.py`) [AgriBench]: as `s2-aligned`, but the axis is growing degree days
+  since sowing, from each field's daily ERA5 file in `Raw/.../weather/`. Daily GDD = max(0, (clip(Tmax) +
+  clip(Tmin)) / 2 - Tbase), clipped to [Tbase, 30 °C], with Tbase 0 °C (wheat), 5 °C (rapeseed), 10 °C (corn,
+  soybean). The grid starts at -50 °C·d and has about 16 equal steps up to the subset's 95th percentile of the
+  last observation (steps of 125–225 °C·d). Motivation: crop development follows heat accumulation more closely
+  than the calendar (Nyborg et al. 2022, thermal positional encoding; Franch et al. 2026, GDD-normalised S2 yield
+  models; Osei et al. 2026 found days-after-planting slightly better than GDD with 1 km temperatures and a fixed
+  planting date). Every field's weather record covers its season.
+- `s2-harmonic/` (`tools/build_yieldsat_s2_harmonic.py`) [AgriBench]: per pixel and band, least-squares fit of
+  c0 + a1 cos + b1 sin + a2 cos + b2 sin (period 365 days, t = days since sowing), with a ridge penalty of 0.5
+  (in observations) on the harmonic terms; 60 features. A band needs 5 valid observations, otherwise NaN
+  (77–98% of pixels fitted, lowest in GER-W). On simulated noisy seasons the ridge makes the coefficients 2–4×
+  more stable than plain least squares at a small cost in fit.
+- `biophys/` (`tools/build_yieldsat_biophys.py`) [AgriBench]: each observation converted to LAI, FAPAR, FCOVER,
+  CCC and CWC with the ESA SNAP Sentinel-2 Toolbox biophysical networks (s2tbx 3.0 "S2A" coefficients, GPL-3.0,
+  pinned commit, downloaded to `upstream/snap-biophysical/`), then placed on the `s2-aligned` grid. The
+  implementation matches SNAP's own test cases (max error 3e-4 for LAI). YieldSAT has no acquisition geometry,
+  so the sun angles are computed for 10:30 local solar time, the view zenith is set to 5° and the relative
+  azimuth to 90°. This is the operational BVNET baseline; PROSAIL-VAE (Zérah et al. 2024; De Sousa & Inglada
+  2026) would be the physics-guided successor. A Transformer-PROSAILVAE checkpoint is public, but the code for
+  its latent head is not, and our reconstruction did not recover simulated LAI (R² 0.05), so it is not used.
+- `arcvae/` (`tools/build_yieldsat_arcvae.py`) [AgriBench, internal testing]: the encoder of ARC-VAE
+  (harryfyjiswalker/arc-vae, GPL-3.0, maize checkpoint), a transformer VAE trained on synthetic Sentinel-2
+  seasons from the ARC archetype crop model. Each pixel's whole season goes in, and the posterior mean and SD of
+  11 ARC parameters come out (N, Cab, Cm, Cw, LAI, ALA, Cbrown scaling; growth speed, start, senescence speed,
+  end): 22 features. Same geometry approximation as `biophys`. The model expects a northern-hemisphere maize
+  calendar, so each observation's day of year is replaced by 120 + days since sowing (observations outside
+  1–365 dropped), which makes the phenology outputs relative to sowing. Crops other than maize are outside its
+  training distribution.
+
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
+
+**Linear probe** (`model=probe`, `tools/probe.py`), the main head for comparing representations. It follows the
+regression probe of the TorchGeo evaluation harness (geo-eval-harness, CoordBench `linear_probe_score`):
+closed-form ridge in float64 on features z-scored with the training fold's statistics, unpenalised intercept,
+penalty chosen by cross-validation, and a warning when the best penalty is on the grid edge. Two AgriBench
+differences: the inner folds are the scheme-mirroring folds below (not a single random split), and the penalty
+is per training pixel (MSE + λ‖w‖², λ in 19 log-spaced values from 1e-6 to 1e3), so the same grid means the same
+shrinkage at any training size. The harness's image-backbone probe is logistic and classification-only, so it
+doesn't apply to yield.
+
+**TabPFN and TabICL** need no tuning: one fit per outer fold, on 32 training pixels per field (TabICL v2 is
+pre-trained on up to ~48k rows), with PCA to 500 (TabPFN) or 100 (TabICL) columns, fitted on training pixels
+only, when an input is wider than that.
 
 The paper doesn't describe tuning. To keep it honest and the same for every head:
 
@@ -270,10 +352,23 @@ pixels within a field are strongly autocorrelated anyway.
 - Each run records the SHA-256 of its fold file, the input file and the config, as for PASTIS-R.
 - **Development:** CV10, LOYO and LORO are reported as cross-validation, like the paper. Model choices are
   made on CV10. LOYO and LORO are reported, not tuned on.
+- **[AgriBench] Pooled R² for LOYO and LORO** (2026-11-09). Each run reports R² and RMSE both as the mean over
+  folds and pooled (all held-out predictions of the run scored together). For LOYO and LORO the dashboard shows
+  pooled R² by default: R² within one held-out year or region is measured against that fold's own mean, so a
+  model that ranks fields well but misses the fold's overall level scores far below zero, and one such fold
+  dominates the mean (ARG-W, LightGBM on `s2`, LOYO: −2.91 as a mean of folds, 0.67 pooled).
 - **Final:** LOCO (2.3b) is run only for configurations chosen on the development schemes, and every run is
   logged in the ledger.
 
 ### 2.9 What a result contains
+
+**Running sweeps.** `python -m tools.sweep_yieldsat --name <sweep> --inputs ... --models ...` submits one Slurm
+array per head and input width: CPU heads run one task per outer fold (the folds of a run execute in
+parallel), GPU heads one task per run (the model loads once). Resources per head are set from measured use,
+the sweep-wide concurrency cap defaults to 200 tasks, finished folds are skipped on re-runs, and a dependent job
+runs `tools.collect_yieldsat`, which combines folds into `metrics.json` and writes the aggregate table
+`results/yieldsat/<sweep>.csv` that the dashboard reads. `--efficiency` reports requested vs used time, CPU and
+memory per array.
 
 For each model × input × subset × scheme:
 
