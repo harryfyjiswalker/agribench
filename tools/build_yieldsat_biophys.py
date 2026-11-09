@@ -77,12 +77,15 @@ def network(net, x, clip=True):
 
 
 def check_networks(nets, n=2000):
-    """Compare with SNAP's own test cases (11 inputs, expected output)."""
+    """Compare with SNAP's own test cases: 11 inputs first, the (clipped) expected output in the last column;
+    rows with no expected value (outside SNAP's definition domain) are skipped."""
     worst = {}
     for var, net in nets.items():
         cases = np.loadtxt(AUX / var / f"{var}_TestCases", delimiter=",", max_rows=n)
-        worst[var] = float(np.max(np.abs(network(net, cases[:, :11], clip=False) - cases[:, 11])))
-        if worst[var] > 1e-3 * max(1.0, np.abs(cases[:, 11]).max()):
+        expected = cases[:, -1]
+        ok = np.isfinite(expected)
+        worst[var] = float(np.max(np.abs(network(net, cases[ok, :11]) - expected[ok])))
+        if worst[var] > 1e-3 * max(1.0, np.abs(expected[ok]).max()):
             raise RuntimeError(f"{var}: implementation differs from SNAP test cases by {worst[var]}")
     return worst
 
