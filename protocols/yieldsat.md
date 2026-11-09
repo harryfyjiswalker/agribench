@@ -227,6 +227,10 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `galileo` | Galileo-Base, 768-d, from the pixel's S2 series | AgriBench |
 | `aef` | AlphaEarth Foundations annual embedding, 64-d | AgriBench |
 | `tessera` | TESSERA annual embedding, 128-d | AgriBench |
+| `presto` | Presto, 128-d, from the pixel's in-season S2 series (monthly composites) | AgriBench |
+| `olmoearth` | OlmoEarth-v1.2-Base, 768-d, from the pixel's in-season S2 acquisitions at their real dates | AgriBench |
+| `anysat` | AnySat-Base, 768-d, from in-season S2 tiles of the field (pixel token with field context) | AgriBench |
+| `prithvi` | Prithvi-EO-2.0-300M-TL, 1024-d, from 4 in-season S2 dates of the field's Raw raster (224 px windows) | AgriBench |
 | `s2-aligned` | 12 S2 bands interpolated onto a fixed grid of days since sowing (every 15 days) | AgriBench: season-aligned version of `s2` |
 | `s2-gdd` | 12 S2 bands interpolated onto a fixed grid of growing degree days since sowing | AgriBench: thermal-time version of `s2-aligned` |
 | `s2-harmonic` | per band, 5 harmonic-regression coefficients (2 harmonics) over days since sowing | AgriBench: compact gap-robust summary |
@@ -269,6 +273,51 @@ SHA-256 and the runner refuses a mismatch):
   the file's time reference + slot offset (checked against the Raw S2 acquisition dates on 25 fields per subset). Weather,
   topography and location are left out on purpose, so `galileo` is comparable to `s2` and location only enters
   through the location encoders. Mean of the encoder's tokens (Galileo `average_tokens`), 768-d.
+- **Time-series foundation models, in-season** [AgriBench]. `aef` and `tessera` are annual products: one
+  embedding per calendar year, computed by their providers from the whole year. The models below instead see only
+  the field's own season, i.e. the S2 observations in its 24 slots, at their real dates (file time reference +
+  slot offset, checked against the Raw acquisition dates on 25 fields per subset, as for `galileo`). This is the
+  "annual summary vs in-season embedding" comparison. Only S2 goes in: no weather, topography or location, so
+  they compare with `s2` and `galileo`. Upstream code and weights are pinned under `upstream/<name>/` and loaded
+  with `weights_only=True`.
+  - `presto/` (`tools/embed_yieldsat_presto.py`): Presto (nasaharvest/presto 11e207a, `default_model.pt`), pixel.
+    Presto was pretrained on monthly composites, so each pixel's valid observations are averaged per calendar month
+    over the field's span of months (median 8–12, at most 13). Each month gets its calendar month token, and months
+    without an observation are masked. Input: 10 S2 bands / 10,000 plus NDVI. S1, ERA5, SRTM and Dynamic World are
+    masked. Presto always adds a location token that cannot be masked, so lat/lon is fixed at (0, 0) for every
+    pixel. Output: the encoder's mean token, 128-d.
+  - `olmoearth/` (`tools/embed_yieldsat_olmoearth.py`): OlmoEarth-v1.2-Base (`allenai/OlmoEarth-v1_2-Base` at Hub
+    revision 2e99a73, code allenai/olmoearth_pretrain 13ca06f), pixel. Each pixel is a 1 × 1 image with patch size 1,
+    which the upstream inference guide supports. Its valid acquisitions (median 6–8 per pixel) go in at their real
+    dates, which the model reads through temporal RoPE. Input: all 12 L2A bands with the upstream "computed"
+    normalisation. The model takes at most 12 timesteps; the 0.8% of ARG-C pixels with 13 have their two
+    closest-in-time observations averaged. Only valid observations are passed: the encoder's inference path attends
+    to every token it is given, including masked ones. Pixels are batched by their number of observations. Output:
+    mean of the output tokens over time, 768-d.
+  - `anysat/` (`tools/embed_yieldsat_anysat.py`): AnySat-Base (gastruc/AnySat 5f6f475, `g-astruc/AnySat` revision
+    63f2521, `models/AnySat.pth`), patch with field context. Each field's raster is rebuilt from the v1 row/col and
+    cut into 24 × 24-pixel tiles (240 m) with AnySat patch size 10 m: a per-pixel temporal encoder (L-TAE), then
+    a spatial transformer across the tile. The output is the pixel's own patch token (768-d). The preprocessed
+    file only has yield-map pixels, so the context is the field itself; cells outside the yield map get the field's
+    mean series. AnySat takes one date list per tile and has no per-timestep mask. So slots where fewer than 10% of
+    the field's pixels are valid are dropped, and the remaining gaps in each pixel are filled by linear
+    interpolation in time. Dates are days since the 1st of the month of the field's first kept slot (as AnySat's
+    PASTIS loader counts from a season start). Band normalisation: mean and std of valid S2 values from a seeded
+    sample pooled over all nine subsets, because AnySat normalises each dataset with its own statistics. The
+    sample includes cloudy observations (the preprocessed file has no cloud mask), which inflates the std of the
+    visible bands; AnySat's input MLP applies GroupNorm after its first layer, so a uniform rescale mostly cancels.
+  - `prithvi/` (`tools/embed_yieldsat_prithvi.py`): Prithvi-EO-2.0-300M-TL (`ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL`
+    revision 63adbd3), a multi-temporal patch model: 3D patches of 1 frame × 16 × 16 px, pretrained on 4-frame HLS
+    stacks with (year, day of year) per frame. Space: the field's Raw S2 raster (the bounding box with its real
+    surroundings) via `tools/yieldsat_patches.py`, in 224 × 224 windows at native 10 m. Each labelled pixel uses the
+    window whose centre is nearest, and takes the last-layer token grid averaged over the 4 frames, sampled
+    bilinearly at the pixel centre. One token covers 160 m, so within-field detail comes only from the
+    interpolation. Time: 4 label-free dates from the field's season, sorted: the first clear in-season acquisition
+    plus the helper's green-up, peak and senescence dates (clear = SCL clear on ≥ 90% of the labelled pixels; the
+    date can repeat when there are few clear dates). In GER-R the median dates are 8, 136, 265 and 295 days after
+    sowing. Prithvi applies its temporal encoding only for its pretraining frame count of 4. Bands: B02, B03, B04,
+    B8A, B11, B12 as HLS B02–B07, in DN, with the checkpoint's mean and std. The TL variant's location input is not
+    used. Output: 1024-d.
 - `aef/` (`tools/extract_yieldsat_aef.py`): the 64-d AlphaEarth annual embedding of the calendar year of the
   field's harvest date, read with HTTP range requests from the Source Cooperative mirror. AEF starts in 2017,
   so the 48 German fields harvested in 2016 have no AEF value (imputed by the runner, and counted in the json).
