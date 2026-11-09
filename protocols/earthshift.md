@@ -1,7 +1,7 @@
 # EarthShift field-delineation evaluation protocol
 
-Status: **draft 2026-11-09. Splits decided (2.1b, leak-free); the other decisions in section 5 are open. Core
-data downloaded and verified on Anunna (2026-11-09); nothing trained yet.** This page sets
+Status: **agreed 2026-11-09 (section 5). Core data downloaded and verified on Anunna; input cache and training
+not built yet.** This page sets
 how AgriBench scores a model on EarthShift's field-delineation tasks, so results are comparable with the
 paper and with each other. Sections marked **[paper]** follow Doerksen and Kerner (2026) or their released
 code exactly. Sections marked **[AgriBench]** fill gaps the paper leaves open or go beyond it.
@@ -53,17 +53,32 @@ The archives keep every chip as a separate small GeoTIFF:
 
 | Download | Countries | Zip size | Unpacked | Files |
 |---|---|---:|---:|---:|
-| **Core (recommended)** | germany, cambodia, denmark, south_africa | **4.3 GB** | 9.1 GB | **26,505** |
+| **Core (downloaded)** | germany, cambodia, denmark, south_africa | **4.3 GB** | 9.1 GB | **26,505** |
 | Everything (only for FTW-All, 2.3c) | all 25 | 56.8 GB | 120.5 GB | 352,803 |
 
 Per country (zip GB / files): germany 0.54 / 3,432; cambodia 0.28 / 1,534; denmark 2.90 / 17,802;
 south_africa 0.61 / 3,737.
 
-**Keep the zips, don't unpack them** [AgriBench]. A zip is one file on Lustre, and the Anunna skill asks us
-to keep finished read-only data as archives (`.claude/skills/anunna/references/file-counts.md`). Each chip
-is a separately compressed zip entry, so a reader can open any chip directly: `zipfile.ZipFile(z).open(name)`,
-or `rasterio.open("/vsizip/<zip>/<inner path>")`. If a tool really needs a folder tree (e.g. to rerun the
-EarthShift code unchanged), unpack to `$TMPDIR` on the compute node inside that job, not on Lustre.
+**Raw zips stay as they are; models read a packed input cache built once from them** [AgriBench]:
+
+- **The zips are the raw copy.** A zip is one file on Lustre, and the Anunna skill asks us to keep finished
+  read-only data as archives (`.claude/skills/anunna/references/file-counts.md`). Each chip is a separately
+  compressed entry, so any chip can be read without unpacking the rest: `zipfile.ZipFile(z).open(name)` or
+  `rasterio.open("/vsizip/<zip>/<inner path>")`. Decompressing one chip takes milliseconds.
+- **Nothing unzips per run.** `tools/build_earthshift_inputs.py` (still to write) reads the zips once and
+  writes, per country, one uncompressed array file with every sample the split files use. Images are kept as
+  uint16 `(N, 4, 256, 256)`, masks as uint8 `(N, 256, 256)`, with an index of `aoi_id` and window. They go
+  to `$project/inputs/earthshift/<country>.npz`. Training jobs memory-map or load them into RAM: a few
+  large sequential reads, which is the fastest pattern on Lustre.
+- **The cache is small**, because only the samples the tasks use are kept: all used Germany chips, the
+  Cambodia and Denmark test chips, and the used South Africa chips. That's about 2,600 images, roughly
+  1.5 GB in 4 files. Denmark's 2.9 GB zip shrinks to about 0.4 GB, because only its 332 test chips are
+  needed.
+- **Encoder features are cached once** per encoder × country in `$project/features/earthshift/`, as for
+  PASTIS-R. The frozen-backbone runs and their learning-rate sweeps read only those.
+- **Unpacking the zips into folders on Lustre gains nothing:** 26,505 small files, slower to list and
+  read, and no faster than the packed cache. If a tool really needs a folder tree (e.g. to rerun the
+  EarthShift code unchanged), unpack to `$TMPDIR` on the compute node inside that job.
 
 ### Commands
 
@@ -279,7 +294,7 @@ The paper also runs A→B on all FTW countries pooled (paper p.4, Table 1: 49,33
 The code ignores FTW's official split here. It re-splits chips 70 / 10 / 20 per country with a seed
 (`data_manager.py:314-400`), so neighbouring chips end up in train and test. The paper gives only effective
 robustness for it (Table 5, row "Season-to-Season"), not mIoU. It needs the 56.8 GB, 352,803-file download.
-**Proposed: leave it out for now** (decision 5.1).
+**Left out** (decision 5.1).
 
 ### 2.4 Metric [paper]
 
@@ -301,18 +316,19 @@ robustness for it (Table 5, row "Season-to-Season"), not mIoU. It needs the 56.8
 
   The temporal lines include the FTW-All task.
 
-**[AgriBench] additions to the metric.**
+**Headline metric = the paper's**: 3-class mIoU at each backbone's resized input size, as above, plus ID,
+OOD, Δ and ρ.
 
-- **Score at native resolution.** The paper scores at each backbone's resized input size (224, 120 or 256 px;
-  2.2). That means a model's score depends on its input size. AgriBench upsamples logits to the native
-  256 × 256 mask and scores there. Paper-style scores at the resized size are reported as well, for the
-  comparison with section 3.
+**[AgriBench] secondary columns** (reported, never used to rank or select):
+
+- **Native-resolution mIoU.** Logits are upsampled to the native 256 × 256 mask and scored there, so models
+  with different input sizes (224, 120, 256 px) are scored on the same pixels.
 - **Per-class IoU**, and the **boundary-class IoU** (class 2) on its own. Boundaries are the hard part of
   delineation, and a 3-class mean hides them.
 - **ρ uses the paper's fixed lines** in the table above, not a fit to AgriBench's own models. That keeps ρ
   stable as models are added and comparable with the paper.
 - **Object-level scores** (FTW's per-field precision and recall at IoU ≥ 0.5) are **not** included: the
-  EarthShift paper doesn't use them. They could come later (decision 5.5).
+  EarthShift paper doesn't use them.
 
 ### 2.5 Inputs and heads that apply [AgriBench]
 
@@ -334,11 +350,21 @@ predict one value per row, so most of them don't carry over directly:
 - An 8-band stacked A+B input is FTW's own default, but it would break the temporal tasks, which need one
   window per sample. It is **not** part of this protocol.
 
-**Caveat for comparing with paper numbers.** In the EarthShift code, Galileo's segmentation model runs only
-Galileo's patch-embedding layer, not its transformer (`models/galileo_model.py:73-103`). Also, in frozen mode
-only the decoder is unfrozen (`training.py:408-410`), so the 1×1 input adapter stays at its random
-initialisation. AgriBench's frozen setting **trains the input adapter with the head** and uses the **full
-encoder**. Expect AgriBench's Galileo numbers to differ from the paper's.
+**Training follows the paper's two settings exactly** (2.2–2.3): frozen backbone (head only, 40 epochs) and
+full fine-tuning (50 epochs). Both use the same decoder, optimiser, schedule, batch size and learning-rate
+grids, no augmentation, and score the last epoch. Per-pixel tabular heads are an optional extra baseline,
+not part of the core benchmark.
+
+**Where the paper's text and its code disagree, AgriBench follows the text** [AgriBench]:
+
+- **Input adapter.** The paper calls the 1×1 input adapter "learnable" (paper p.6). In frozen mode the code
+  unfreezes only the decoder (`training.py:408-410`), so the adapter stays at its random initialisation.
+  AgriBench trains the adapter together with the head.
+- **Galileo.** The paper evaluates Galileo as a backbone, but its segmentation wrapper runs only the
+  patch-embedding layer, not the transformer (`models/galileo_model.py:73-103`). AgriBench uses the full
+  encoder.
+
+Expect AgriBench's Galileo numbers to differ from the paper's.
 
 ### 2.6 Splits, seeds and provenance [AgriBench]
 
@@ -367,8 +393,8 @@ encoder**. Expect AgriBench's Galileo numbers to differ from the paper's.
 
 For each model × setting (frozen / full) × task:
 
-- ID mIoU, OOD mIoU, Δ and ρ, as mean ± std over 5 seeds;
-- per-class IoU (native resolution), plus the paper-style mIoU at the resized resolution;
+- headline: ID mIoU, OOD mIoU, Δ and ρ (paper-style, resized resolution), as mean ± std over 5 seeds;
+- secondary: native-resolution mIoU and per-class IoU, boundary IoU included;
 - the learning rate, the number of samples in each role, seeds, and split-file and zip hashes.
 
 **Leaderboard:** one table for location (DE→KH, DE→DK) and one for temporal (ZA A→B, DE 2018→2019),
@@ -415,17 +441,22 @@ frozen / 3e-3 full.
 - **FTW's own benchmark protocol** (2-window stacked input, object-level metrics, all-country training). It
   could be a separate AgriBench entry later.
 
-## 5. Decisions to confirm
+## 5. Decisions
 
-1. **Scope = the paper's four tasks** (DE→KH, DE→DK, ZA A→B, DE 2018→2019), with the core 4.3 GB download.
-   FTW-All (57 GB, 353k files, no mIoU in the paper) stays out for now. *(recommended)*
-2. **Keep the zips on Lustre, don't unpack**: 4 files instead of 26,505. Read chips through `zipfile` /
-   `/vsizip/`. *(recommended)*
-3. **Decided 2026-11-09: no leaky splits.** AgriBench uses the leak-free splits in 2.1b for all four
-   tasks. The paper's numbers stay as rough sanity checks only.
-4. **Score at native 256 × 256** and add per-class and boundary IoU, while also reporting the paper-style
-   resized mIoU. ρ uses the paper's fixed baseline lines. *(recommended)*
-5. **No object-level metrics for now** (the paper doesn't use them). *(recommended)*
-6. **The first AgriBench route is frozen encoder + the paper's light decoder**, with the input adapter
-   trained. Full fine-tuning and per-pixel tabular baselines come after. *(recommended)*
-7. **Five fixed seeds (0–4)** and a test ledger, as in 2.6–2.7. *(recommended)*
+All agreed on 2026-11-09. The rule is to follow the paper's conditions unless there's a good reason not to.
+
+1. **Scope = the paper's four tasks** (DE→KH, DE→DK, ZA A→B, DE 2018→2019). FTW-All is left out: it has no
+   mIoU in the paper and a random chip split that leaks.
+2. **Data handling:** the raw zips stay on Lustre unchanged. A packed per-country input cache (about 1.5 GB,
+   4 files) is built once from them, and encoder features are cached once per encoder (section 0). Nothing
+   is unpacked per run.
+3. **No leaky splits.** AgriBench uses the leak-free splits in 2.1b for all four tasks. The paper's numbers
+   stay as rough sanity checks only.
+4. **Headline metric = the paper's** (3-class mIoU at the resized input size, ID / OOD / Δ / ρ with the
+   paper's fixed lines). Native-resolution and per-class / boundary IoU are secondary columns (2.4).
+5. **No object-level metrics**, as in the paper.
+6. **The paper's two training settings exactly** (frozen backbone and full fine-tuning, 2.2–2.3), following
+   the paper's text where its code disagrees: the input adapter is trained, and Galileo runs its full
+   encoder (2.5). Per-pixel tabular heads are an optional extra.
+7. **Five seeds, mean ± std**, as in the paper, fixed to 0–4 so runs can be repeated. Test-set runs go in the
+   ledger (2.6–2.7).
