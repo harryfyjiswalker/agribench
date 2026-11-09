@@ -30,7 +30,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import warnings
 
-warnings.filterwarnings("ignore", message="The epoch parameter in `scheduler.step()`")  # raised inside SequentialLR
+warnings.filterwarnings("ignore", message=r"The epoch parameter in `scheduler\.step\(\)`")  # raised inside SequentialLR
 
 from tools import earthshift as es
 
