@@ -1,9 +1,9 @@
-# YieldSAT evaluation protocol (draft for review)
+# YieldSAT evaluation protocol
 
-Status: **draft, nothing run yet.** This page sets how every AgriBench model is scored on YieldSAT so results are
+Status: **agreed 2026-11-09, nothing run yet.** This page sets how every AgriBench model is scored on YieldSAT so results are
 comparable with the paper and with each other. Sections marked **[paper]** follow Miranda et al. (2026)
-exactly; sections marked **[AgriBench]** fill gaps the paper leaves open, and need the group's agreement before
-the first run.
+exactly; sections marked **[AgriBench]** fill gaps the paper leaves open or go beyond it. All decisions are
+listed in section 4.
 
 Paper: Miranda, Pathak et al., *YieldSAT: A Multimodal Benchmark Dataset for High-Resolution Crop Yield
 Prediction*, arXiv:2604.00940 (2026). Website: https://yieldsat.github.io/. The authors publish no fold files and
@@ -126,12 +126,33 @@ The paper's "S2" input is the 12 S2 bands. Its "S2 + ADM" input is all bands. Th
 
 - **Leave-one-year-out (LOYO):** one fold per year in the subset. Train on all other years, test on the
   held-out year. That's 5–8 folds, depending on the subset.
-- **Leave-one-region-out (LORO):** one fold per region. A region is `farm_identifier`, following the
-  authors' notebook ("farm_identifier: unique ID for a farm (region)") and the paper's definition: "a set of
-  fields belonging to a single farmer or to a local data provider". That's 6–44 folds, depending on the subset.
-**Open point:** the paper's weight-space figure for Argentina shows 8 LORO regions, but ARG-S has 44 farms.
-Argentina has 5 provinces, or 8 if you count the inconsistent spellings separately. So the paper may have
-grouped farms differently for that figure. We follow the documented definition (farm) and will ask the authors.
+- **Leave-one-region-out (LORO):** one fold per region. A region is a **group of neighbouring farms**. The
+  paper defines a region as "a set of fields belonging to a single farmer or to a local data provider", and
+  its weight-space figure shows 8 regions for Argentina. Using every farm as its own region would give up to
+  44 folds, many with only a handful of test fields, so [AgriBench] farms are grouped by location:
+  1. For each subset, take each farm's location as the mean centroid of its fields, in km (equirectangular
+     projection around the subset's mean latitude).
+  2. If the subset has more than 8 farms, cluster the farms into 8 groups with Ward agglomerative clustering
+     (deterministic, no random seed). Otherwise each farm starts as its own region.
+  3. While any region has fewer than 10 fields (and more than 2 regions remain), merge the smallest such
+     region into the region whose centroid is nearest.
+  4. Farms are never split, so all of a farm's fields are always in the same region.
+
+  This gives 3–8 regions per subset, each with at least 12 fields (checked on the data, 2026-11-09):
+
+  | Subset | Farms | Regions | Fields per region |
+  |---|---:|---:|---|
+  | ARG-C | 29 | 6 | 52, 49, 24, 24, 23, 13 |
+  | ARG-S | 44 | 8 | 115, 94, 84, 55, 39, 24, 17, 12 |
+  | ARG-W | 21 | 3 | 58, 55, 13 |
+  | BRA-C | 7 | 4 | 56, 28, 18, 16 |
+  | BRA-S | 9 | 6 | 94, 77, 42, 35, 27, 18 |
+  | BRA-W | 6 | 5 | 47, 41, 22, 18, 12 |
+  | GER-R | 6 | 6 | 30, 22, 17, 15, 15, 12 |
+  | GER-W | 6 | 3 | 124, 48, 16 |
+  | URG-S | 10 | 6 | 283, 114, 59, 55, 35, 26 |
+
+  The region assignment is frozen in the fold files (2.8), so it never changes between runs.
 
 ### 2.3b Final evaluation: leave-one-country-out (LOCO) [AgriBench: beyond the paper]
 
@@ -208,7 +229,7 @@ The paper doesn't describe tuning. To keep it honest and the same for every head
 - **The inner split mirrors the outer scheme:**
   - CV10: 3-fold `StratifiedGroupKFold` (stratified by farm, grouped by field);
   - LOYO: `GroupKFold` on year, with k = min(3, number of training years);
-  - LORO: `GroupKFold` on farm, with k = min(3, number of training farms);
+  - LORO: `GroupKFold` on region, with k = min(3, number of training regions);
   - LOCO, soybean and wheat: leave one *training* country out (2 inner folds);
   - LOCO, corn: there's only one training country, so use `GroupKFold` on farm, k = 3, within it.
 - **Selection metric:** pixel-level RMSE, averaged over the inner folds. This is the quantity the models are
@@ -270,14 +291,11 @@ ARG-S at field level.
 
 ## 4. Decisions
 
-Agreed (2026-11-09):
+All agreed on 2026-11-09:
 
 - **Leave-one-country-out is the final evaluation** and AgriBench's headline YieldSAT result, run per crop
   across countries (2.3b).
-
-Still to confirm before running:
-
-1. Region for LORO = `farm_identifier` (2.3).
-2. Nested tuning, selected by pixel RMSE (2.6).
-3. Training cap of 256 pixels per field (2.7).
-4. Include all quality levels, as the paper does. An optional "good only" ablation could come later.
+- **Region for LORO = a group of neighbouring farms**, 3–8 per subset, built by the rule in 2.3.
+- **Nested tuning**, selected by pixel RMSE (2.6).
+- **Training cap of 256 pixels per field** (2.7).
+- **All quality levels are included**, as in the paper. A "good only" ablation could come later.
