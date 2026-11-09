@@ -38,6 +38,12 @@
 
 ## Field Delineation
 
+- [EarthShift](https://earthshift.github.io/) (Doerksen and Kerner, 2026), field-delineation tasks
+  - 3-class field segmentation (background, field interior, boundary) on Fields of The World Sentinel-2
+    chips (256 × 256 px, RGB + NIR), scored with ID and OOD mIoU. Covers the location-shift tasks
+    (train in Germany, test in Cambodia and in Denmark) and the temporal-shift tasks (South Africa season
+    to season, Germany 2018 to 2019). Protocol: [protocols/earthshift.md](protocols/earthshift.md).
+
 
 _____________________________________________________________________________________________________________________________________________________________________
 
