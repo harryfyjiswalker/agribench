@@ -32,6 +32,8 @@ planteur,loio,martinique,anysat,lightgbm,cap-256,,10.31,78.81,79.13,0.34,0.3,0.0
 planteur,loio,guyane,anysat,lightgbm,cap-256,,10.13,79.08,79.35,0.35,0.09,0.29,0.0,0.61,0.2,0.16,12.61,learning_rate=0.05;num_leaves=31,501760,506,8274749,0,768,1,0.483,fc11fdc50d,pb1
 planteur,loio,mayotte,anysat,lightgbm,cap-256,,11.73,93.36,93.38,0.0,0.0,0.0,0.0,0.36,0.0,0.09,11.81,learning_rate=0.05;num_leaves=31,587776,140,2280076,0,768,1,0.476,fc11fdc50d,pb1
 planteur,loio,mean,anysat,lightgbm,cap-256,,10.27,79.76,80.33,0.16,0.29,0.26,0.57,0.32,0.13,0.08,12.38,,,,,,768,5,2.447,fc11fdc50d,pb1
+planteur,loio,martinique,anysat,probe,all,,12.15,80.14,80.84,7.36,0.0,0.0,6.29,2.68,0.0,0.0,18.13,lr=0.0439,31869309,550,9006432,0,768,1,1.116,fc11fdc50d,pb1
+planteur,loio,guyane,anysat,probe,all,,10.58,81.11,81.3,3.29,0.0,0.0,0.0,0.04,0.0,0.0,16.69,lr=0.00114,32046828,506,8274749,0,768,1,1.148,fc11fdc50d,pb1
 planteur,loio,reunion,biophys,lightgbm,cap-256,,9.48,74.33,74.42,0.49,0.07,0.02,0.44,0.3,0.14,0.0,20.96,learning_rate=0.05;num_leaves=127,440320,813,13277313,0,60,1,0.228,fc11fdc50d,pb1
 planteur,loio,guadeloupe,biophys,lightgbm,cap-256,,12.62,82.59,82.43,0.61,0.22,0.01,15.3,2.3,0.06,0.0,22.58,learning_rate=0.05;num_leaves=127,448000,735,12026981,0,60,1,0.228,fc11fdc50d,pb1
 planteur,loio,martinique,biophys,lightgbm,cap-256,,13.06,81.46,81.5,1.96,0.88,0.0,18.71,1.37,0.03,0.0,22.58,learning_rate=0.05;num_leaves=127,499200,550,9006432,0,60,1,0.208,fc11fdc50d,pb1
@@ -84,6 +86,7 @@ planteur,loio,martinique,dofa,probe,all,,13.42,75.34,77.07,10.46,0.62,0.09,18.39
 planteur,loio,guyane,dofa,probe,all,,11.42,80.12,80.58,9.51,0.0,0.0,1.04,0.2,0.0,0.0,19.36,lr=0.0001,32046828,506,8274749,0,768,1,1.179,fc11fdc50d,pb1
 planteur,loio,mayotte,dofa,probe,all,,12.19,97.3,97.32,0.0,0.0,0.0,0.17,0.0,0.0,0.0,20.87,lr=0.0439,37546695,140,2280076,0,768,1,1.354,fc11fdc50d,pb1
 planteur,loio,mean,dofa,probe,all,,12.94,82.41,82.83,5.53,0.31,0.02,13.39,1.35,0.11,0.0,19.9,,,,,,768,5,5.868,fc11fdc50d,pb1
+planteur,loio,reunion,galileo,lightgbm,cap-256,,13.55,78.37,77.52,6.06,0.83,0.0,23.01,0.4,0.57,0.0,25.55,learning_rate=0.05;num_leaves=127,440320,813,13277313,0,768,1,0.556,fc11fdc50d,pb1
 planteur,loio,reunion,latlon,lightgbm,cap-256,,9.33,74.61,74.61,0.0,0.0,0.0,0.0,0.0,0.0,0.0,14.53,learning_rate=0.05;num_leaves=127,440320,813,13277313,0,2,1,0.259,fc11fdc50d,pb1
 planteur,loio,guadeloupe,latlon,lightgbm,cap-256,,10.17,81.34,81.34,0.0,0.0,0.0,0.0,0.0,0.0,0.0,16.4,learning_rate=0.05;num_leaves=127,448000,735,12026981,0,2,1,0.097,fc11fdc50d,pb1
 planteur,loio,martinique,latlon,lightgbm,cap-256,,10.18,81.42,81.42,0.0,0.0,0.0,0.0,0.0,0.0,0.0,18.51,learning_rate=0.05;num_leaves=127,499200,550,9006432,0,2,1,0.096,fc11fdc50d,pb1
