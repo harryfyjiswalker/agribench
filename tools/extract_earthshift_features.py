@@ -31,7 +31,7 @@ def main():
     p.add_argument("--out", type=Path, help="default: inputs/earthshift/features-v1/<model>")
     p.add_argument("--batch", type=int, default=8)
     p.add_argument("--countries", nargs="+", default=list(es.COUNTRIES))
-    p.add_argument("--smoke", action="store_true", help="first 16 samples per country only")
+    p.add_argument("--smoke", action="store_true", help="first 16 samples per country only (rest left as zeros)")
     args = p.parse_args()
     out = args.out or FEATURES / args.model
     if (out / "manifest.json").exists():
@@ -57,8 +57,9 @@ def main():
                 x = F.interpolate(dn, size=(size, size), mode="bilinear", antialias=True, align_corners=False)  # = resize()
                 mo = torch.as_tensor(months[s:s + len(dn)], device=device)
                 f = backbone.features(backbone.prepare(x, mo), mo).float().cpu().numpy()
-                if arr is None:
-                    arr = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float32, shape=(n, *f.shape[1:]))
+                if arr is None:  # smoke: full length so row indices line up, zeros after the first n rows
+                    arr = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float32,
+                                                    shape=(len(images), *f.shape[1:]))
                 arr[s:s + len(f)] = f
                 if s == 0 or (s // args.batch) % 25 == 0:
                     print(f"  {country} {s + len(f)}/{n}  {time.time() - t0:.0f} s", flush=True)
@@ -67,7 +68,7 @@ def main():
         arr.flush()
         del arr
         tmp.rename(out / f"{country}-features.npy")
-        shapes[country] = [n, *np.load(out / f"{country}-features.npy", mmap_mode="r").shape[1:]]
+        shapes[country] = [len(images), *np.load(out / f"{country}-features.npy", mmap_mode="r").shape[1:]]
         print(f"{country}: {shapes[country]} in {time.time() - t0:.0f} s", flush=True)
     manifest = {
         "model": args.model, "input_size": size, "dtype": "float32", "backbone_mode": "eval", "smoke": args.smoke,
