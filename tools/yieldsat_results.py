@@ -42,6 +42,26 @@ def write_fold(out, common, row, field_names, field, y, p, tuning_rows):
     tmp.rename(out / f"fold-{k}.json")  # written last: its presence means the fold is complete
 
 
+# Files that determine a YieldSAT result. Folds run with different commits are combined only when none of these
+# differ between the commits (e.g. a change to the dashboard or the publish script doesn't matter).
+MODEL_CODE = ["run_yieldsat.py", "conf/yieldsat", "tools/yieldsat.py", "tools/yieldsat_results.py"]
+
+
+def same_model_code(commits, repo=Path(__file__).resolve().parents[1]):
+    """True if every commit has identical MODEL_CODE (needs the commits in the repo at `repo`; dirty or unknown
+    commits never match)."""
+    import subprocess
+    commits = sorted(commits, key=str)
+    if any(c is None or str(c).endswith("-dirty") for c in commits):
+        return False
+    base = commits[0]
+    for c in commits[1:]:
+        r = subprocess.run(["git", "-C", str(repo), "diff", "--quiet", base, c, "--", *MODEL_CODE], capture_output=True)
+        if r.returncode != 0:  # 1 = differs; anything else (unknown commit) = can't tell, so refuse
+            return False
+    return True
+
+
 def fold_files(out):
     return sorted(Path(out).glob("fold-*.json"), key=lambda f: int(f.stem.split("-")[1]))
 
@@ -59,8 +79,9 @@ def combine(out, require_complete=True):
                 raise ValueError(f"{out}: folds disagree on {key}")
         if f["provenance"]["fold_file_sha256"] != first["provenance"]["fold_file_sha256"]:
             raise ValueError(f"{out}: folds come from different fold files")
-        if f["provenance"].get("git_commit") != first["provenance"].get("git_commit"):
-            raise ValueError(f"{out}: folds were run with different code versions")
+    commits = {f["provenance"].get("git_commit") for f in folds}
+    if len(commits) > 1 and not same_model_code(commits):
+        raise ValueError(f"{out}: folds were run with code versions that differ in model code ({sorted(map(str, commits))})")
     per_fold = sorted((f["fold_result"] for f in folds), key=lambda r: r["fold"])
     expected = first["folds_in_scheme"]
     if require_complete and not first["smoke"] and len(per_fold) != expected:
@@ -77,6 +98,7 @@ def combine(out, require_complete=True):
     result = {**{k: first.get(k, DEFAULTS.get(k)) for k in RUN_KEYS}, "folds": len(per_fold), "summary": summary,
               "pooled": score_levels(preds["y"], preds["p"], preds["field"]), "per_fold": per_fold,
               "cost": {"task_seconds": float(df.seconds.sum()), "max_peak_rss_gb": float(df.get("peak_rss_gb", pd.Series([np.nan])).max())},
-              "provenance": first["provenance"] | {"slurm_jobs": sorted({str(f["provenance"].get("slurm_job")) for f in folds})}}
+              "provenance": first["provenance"] | {"slurm_jobs": sorted({str(f["provenance"].get("slurm_job")) for f in folds}),
+                                                 "git_commits": sorted(map(str, commits))}}
     (out / "metrics.json").write_text(json.dumps(result, indent=2, default=str) + "\n")
     return result
