@@ -7,3 +7,4 @@
 22ae3685e6b803f7bcb20e4099b476922f09891f PR 59: fixes two cases that crashed before (LOCO column order, PCA larger than the training set)
 9c65c7062b98dbf77fa6cefe7f48211a7f08b79d PR 66: how folds are combined, not what a fold computes
 1987c42e7b2da9b8b1af63ece486fb98b0005062 PR 66: the dirty flag ignores results/ (provenance only)
+dfb9b9418e15211a89f2ddcdd889ba729acda525 this commit: how folds are combined, not what a fold computes
