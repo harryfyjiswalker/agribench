@@ -50,6 +50,8 @@ select { font: inherit; font-size: 14px; padding: 6px 8px; border-radius: 8px; b
 svg text { fill: var(--text-secondary); font-size: 12px; }
 .chart-wrap { overflow-x: auto; }
 .table-wrap { overflow-x: auto; border-radius: 8px; }
+svg .pt .ci { display: none; pointer-events: none; }
+svg .pt:hover .ci { display: inline; }
 table { border-collapse: separate; border-spacing: 0; font-size: 13.5px; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); }
 th { position: sticky; top: 0; background: var(--surface-1); color: var(--text-secondary); font-weight: 600; cursor: pointer; user-select: none; }
@@ -353,24 +355,24 @@ function renderChart(rows, metric, o = {}) {
       const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${cover}: ${fmt(metric, p.v)}` +
         (p.ci ? `<br>Approx. 95% interval of the mean: ${fmt(metric, p.ci[0])} to ${fmt(metric, p.ci[1])}` : "") +
         `${o.extra ? o.extra(i, h) : ""}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}${p.v < lo ? "<br>Below the axis: drawn at its left edge" : ""}`;
-      // with whiskers, each head sits on its own line within the row so the intervals don't overlap
-      const yk = pts.some(q => q.ci) ? y + (k - (heads.length - 1) / 2) * 6 : y;
-      if (p.ci) {  // whisker: the bootstrap interval of the mean over subsets, drawn under the marker
-        const a = x(p.ci[0]), b = x(Math.min(p.ci[1], hi)), c = `var(--series-${k + 1})`, y = yk;
-        g += `<g opacity="0.55"><line x1="${a}" x2="${b}" y1="${y}" y2="${y}" stroke="${c}" stroke-width="2"/>` +
-             `<line x1="${a}" x2="${a}" y1="${y - 4}" y2="${y + 4}" stroke="${c}" stroke-width="2"/>` +
-             `<line x1="${b}" x2="${b}" y1="${y - 4}" y2="${y + 4}" stroke="${c}" stroke-width="2"/></g>`;
+      // whisker: the bootstrap interval of the mean over subsets, shown only while the marker is hovered
+      let ci = "";
+      if (p.ci) {
+        const a = x(p.ci[0]), b = x(Math.min(p.ci[1], hi)), c = `var(--series-${k + 1})`;
+        ci = `<g class="ci"><line x1="${a}" x2="${b}" y1="${y}" y2="${y}" stroke="${c}" stroke-width="2"/>` +
+             `<line x1="${a}" x2="${a}" y1="${y - 5}" y2="${y + 5}" stroke="${c}" stroke-width="2"/>` +
+             `<line x1="${b}" x2="${b}" y1="${y - 5}" y2="${y + 5}" stroke="${c}" stroke-width="2"/></g>`;
       }
       if (p.v < lo) g += `<text x="${x(lo) + 10}" y="${y + 4}" style="fill:var(--text-muted)">◀ ${fmt(metric, p.v)}</text>`;
-      g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">${marker(SHAPES[k], x(p.v), yk, 5.5, `var(--series-${k + 1})`, true, !p.complete)}` +
-           `<circle cx="${x(p.v)}" cy="${yk}" r="9" fill="transparent"/></g>`;
+      g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">${ci}${marker(SHAPES[k], x(p.v), y, 5.5, `var(--series-${k + 1})`, true, !p.complete)}` +
+           `<circle cx="${x(p.v)}" cy="${y}" r="12" fill="transparent"/></g>`;
     });
   });
   svg.innerHTML = g;
   if (o.svg) return;
   document.getElementById("chart-note").textContent =
     `Mean of the per-subset scores. Each head is averaged over every subset it has finished for that input; a hollow marker means fewer than all ${allSubsets.length} subsets so far. Only filled (complete) markers set the order: inputs with no complete head yet are listed last. Hover a marker for the subsets it covers and their spread.` +
-    (CI_COLS[metric] ? " Whiskers: approximate 95% interval of the mean, from field-level bootstrap intervals per subset (1,000 resamples of test fields within each held-out fold), combined assuming independent subsets; overlapping whiskers mean the difference is not clear." : "") +
+    (CI_COLS[metric] ? " Hover a marker to see its approximate 95% interval of the mean, from field-level bootstrap intervals per subset (1,000 resamples of test fields within each held-out fold), combined assuming independent subsets; where two intervals overlap, the difference is not clear." : "") +
     (val("f-scheme") === "cv10" ? " " + CV10_NOTE : "");
 }
 // ---- Line charts for the early-season and label-efficiency views ----
