@@ -316,7 +316,7 @@ GER-R,loro,wofost-da,probe,-0.4433,-0.61,-0.3128,1.6128,1.4417,1.789
 GER-R,loro,wofost-da+s2-aligned,lightgbm,-0.0445,-0.3341,0.1838,1.372,1.1851,1.5858
 GER-R,loro,wofost-da+s2-aligned,probe,-0.1999,-0.5473,0.0739,1.4705,1.2512,1.711
 GER-R,loro,wofost-da-snap,lightgbm,-0.1785,-0.5483,0.1502,1.4573,1.228,1.6961
-GER-R,loro,wofost-da-snap,probe,-0.4194,-0.6992,-0.2171,1.5993,1.3751,1.8074
+GER-R,loro,wofost-da-snap,probe,-0.4194,-0.6992,-0.2171,1.5993,1.3751,1.8073
 GER-R,loro,wofost-da-snap+s2-aligned,lightgbm,-0.0281,-0.3115,0.2142,1.3612,1.1483,1.5794
 GER-R,loro,wofost-da-snap+s2-aligned,probe,-0.1392,-0.4229,0.0942,1.4328,1.2368,1.5952
 GER-R,loyo,weather-pheno,lightgbm,-0.5695,-0.9559,-0.2975,1.6818,1.5049,1.8547

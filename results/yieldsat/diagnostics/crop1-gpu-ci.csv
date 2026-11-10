@@ -142,7 +142,7 @@ BRA-S,loro,weather-pheno,tabpfn,0.1148,0.0415,0.1784,0.6519,0.6012,0.7081
 BRA-S,loro,weather-pheno+s2-aligned,tabicl,0.0099,-0.2424,0.175,0.6894,0.6369,0.7437
 BRA-S,loro,weather-pheno+s2-aligned,tabpfn,0.3615,0.2385,0.4591,0.5536,0.4968,0.6105
 BRA-S,loro,wofost,tabicl,0.0097,-0.1266,0.1209,0.6895,0.6267,0.7557
-BRA-S,loro,wofost,tabpfn,0.0905,-1e-04,0.1674,0.6608,0.6061,0.7194
+BRA-S,loro,wofost,tabpfn,0.0905,-0.0001,0.1674,0.6608,0.6061,0.7194
 BRA-S,loro,wofost+s2-aligned,tabicl,0.179,-0.0006,0.3302,0.6278,0.5637,0.6852
 BRA-S,loro,wofost+s2-aligned,tabpfn,0.3184,0.1884,0.4288,0.572,0.5161,0.6339
 BRA-S,loyo,weather-pheno,tabicl,-0.1629,-0.2394,-0.0973,0.7471,0.6845,0.8072
