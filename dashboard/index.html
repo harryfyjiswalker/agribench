@@ -185,7 +185,7 @@ const ES_SETTING_LABEL = {frozen: "frozen encoder", full: "full fine-tuning"};
 const esLabel = r => `${ES_MODEL_LABEL[r.model] || r.model} · ${ES_SETTING_LABEL[r.setting] || r.setting}`;
 const base = s => String(s).split("@")[0];
 const label = s => base(s).split("+").map(b => INPUT_LABEL[b] || b).join(" + ");
-let ROWS = [], DECOMP = [];
+let ROWS = [], DECOMP = [], DECOMP_LOADED = false, DECOMP_READY = null;
 let sort = {key: "mean", dir: -1};
 
 async function fetchFirst(paths) {
@@ -204,14 +204,16 @@ async function load() {
   if (!idx) { document.getElementById("meta").textContent = "No results published yet."; return; }
   const index = await idx.r.json();
   const root = idx.base.replace(/index\.json$/, "");
-  for (const f of index.files) {
-    const r = await fetch(root + f.path, {cache: "no-store"});
-    if (r.ok) ROWS.push(...parseCSV(await r.text()));
-  }
-  for (const path of index.diagnostics || []) {
-    const r = await fetch(root + path, {cache: "no-store"});
-    if (r.ok) DECOMP.push(...parseCSV(await r.text()));
-  }
+  // All tables in parallel; the publish stamp in the URL lets the browser cache them until the next publish.
+  const v = "?v=" + encodeURIComponent(index.updated);
+  const grab = path => fetch(root + path + v).then(r => r.ok ? r.text() : "").then(t => t ? parseCSV(t) : []).catch(() => []);
+  for (const rows of await Promise.all(index.files.map(f => grab(f.path)))) ROWS.push(...rows);
+  // The error-decomposition tables are only needed by that view: load them in the background.
+  DECOMP_READY = Promise.all((index.diagnostics || []).map(grab)).then(parts => {
+    for (const rows of parts) DECOMP.push(...rows);
+    DECOMP_LOADED = true;
+    if (val("f-view") === "decomp") render();
+  });
   document.getElementById("meta").textContent =
     `${ROWS.length} result rows · updated ${index.updated} · sweeps: ${[...new Set(ROWS.map(r => r.sweep).filter(Boolean))].join(", ")}`;
   fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))].sort((a, b) => (b === "yieldsat") - (a === "yieldsat")), d => DATASET_LABEL[d] || d);
@@ -312,7 +314,6 @@ function renderChart(rows, metric) {
   svg.innerHTML = g;
   document.getElementById("chart-note").textContent =
     `Mean of the per-subset scores. Each head is averaged over every subset it has finished for that input; a hollow marker means fewer than all ${allSubsets.length} subsets so far. Only filled (complete) markers set the order: inputs with no complete head yet are listed last. Hover a marker for the subsets it covers and their spread.`;
-  svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
 }
 // ---- Line charts for the early-season and label-efficiency views ----
 // series: [{name, pts: [{x, v, complete, tip}]}]; xs: tick positions; xText: tick label; log: log x axis.
@@ -345,7 +346,6 @@ function lineChart(svgId, legendId, series, xs, xText, log, metric, xTitle) {
       `<circle cx="${x(p.x)}" cy="${y(p.v)}" r="11" fill="transparent"/></g>`;
   });
   svg.innerHTML = g;
-  svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
 }
 const nSubsets = scheme => new Set(ROWS.filter(r => r.dataset === "yieldsat" && r.scheme === scheme && !String(r.subset).includes(">")).map(r => r.subset)).size;
 function point(rows, metric, x, need, name, xLabel) {
@@ -405,6 +405,7 @@ function renderDecomp(scheme) {
   const PARTS = [["B_share", "Level bias", 2], ["V_share", "Spread", 4], ["A_share", "Ranking", 1]];
   document.getElementById("decomp-legend").innerHTML = PARTS.map(([, n, k]) =>
     `<span><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="2" fill="var(--series-${k})"/></svg>${n}</span>`).join("");
+  if (!DECOMP_LOADED) { svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">Loading diagnostics…</text>`; return; }
   const rows = DECOMP.filter(r => r.scheme === scheme && r.model === head && r.group !== "pooled" && +r.n_fields >= 10 &&
     !String(r.input).includes("@") && r.r2 !== "" && !isNaN(r.r2));
   if (scheme === "cv10" || !rows.length) { svg.setAttribute("height", 40);
@@ -433,7 +434,6 @@ function renderDecomp(scheme) {
     g += `<text x="${W - R + 10}" y="${y + 17}">R² ${fmt("r2", it.r2)} → ${fmt("r2", it.r2b)}</text>`;
   });
   svg.innerHTML = g;
-  svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
 }
 function renderEarthShift(rows) {
   const svg = document.getElementById("es-chart"), t = document.getElementById("es-table");
@@ -467,7 +467,6 @@ function renderEarthShift(rows) {
       `<rect x="${x(Math.min(r.id_miou_mean, r.ood_miou_mean)) - 12}" y="${y - 12}" width="${Math.abs(x(r.id_miou_mean) - x(r.ood_miou_mean)) + 24}" height="24" fill="transparent"/></g>`;
   });
   svg.innerHTML = g;
-  svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
   const cols = ["Model", "Setting", "LR", "Seeds", "ID mIoU", "OOD mIoU", "Δ", "ρ", "Boundary IoU ID", "Boundary IoU OOD"];
   let h = `<thead><tr>${cols.map((c, i) => `<th class="${i < 2 ? "l" : ""}" style="cursor:default">${c}</th>`).join("")}</tr></thead><tbody>`;
   for (const r of rows) h += `<tr><td class="l">${ES_MODEL_LABEL[r.model] || r.model}</td><td class="l">${ES_SETTING_LABEL[r.setting] || r.setting}</td>` +
@@ -532,15 +531,20 @@ function renderTable(rows, metric) {
   t.innerHTML = h + "</tbody>";
   t.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
     const k = th.dataset.key; sort = {key: k, dir: sort.key === k ? -sort.dir : (k === "input" ? 1 : -1)}; render(); }));
-  t.querySelectorAll("td[data-tip]").forEach(td => td.dataset.tip && hover(td, td.dataset.tip));
 }
-function hover(el, html) {
+// One tooltip handler for the whole page: any element with data-tip shows it.
+(() => {
   const tip = document.getElementById("tip");
-  el.addEventListener("mousemove", e => { tip.innerHTML = html; tip.style.display = "block";
-    const w = tip.offsetWidth; tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + "px"; tip.style.top = (e.clientY + 14) + "px"; });
-  el.addEventListener("mouseleave", () => tip.style.display = "none");
-}
-addEventListener("resize", () => ROWS.length && render());
+  let current = null;
+  document.addEventListener("mousemove", e => {
+    const el = e.target.closest ? e.target.closest("[data-tip]") : null;
+    if (!el || !el.dataset.tip) { if (current) { tip.style.display = "none"; current = null; } return; }
+    if (el !== current) { tip.innerHTML = el.dataset.tip; tip.style.display = "block"; current = el; }
+    const w = tip.offsetWidth; tip.style.left = Math.min(e.clientX + 14, innerWidth - w - 8) + "px"; tip.style.top = (e.clientY + 14) + "px";
+  }, {passive: true});
+})();
+let resizeTimer;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => ROWS.length && render(), 150); });
 load();
 </script>
 </body>
