@@ -68,8 +68,9 @@ import datetime, json, pathlib
 files = sorted(str(p.relative_to("results")) for p in pathlib.Path("results").glob("*/*.csv"))
 now = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
 diag = sorted(str(p.relative_to("results")) for p in pathlib.Path("results").glob("yieldsat/diagnostics/*-decomp.csv"))
+ci = sorted(str(p.relative_to("results")) for p in pathlib.Path("results").glob("yieldsat/diagnostics/*-ci.csv"))
 pathlib.Path("results/index.json").write_text(json.dumps({"updated": now, "files": [{"path": f} for f in files],
-                                                          "diagnostics": diag}, indent=2) + "\n")
+                                                          "diagnostics": diag, "intervals": ci}, indent=2) + "\n")
 PY
 git add results
 if git diff --cached --quiet -- results/*/*.csv results/yieldsat/diagnostics; then
