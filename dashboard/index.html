@@ -174,7 +174,7 @@ const HEAD_ORDER = ["probe", "lightgbm", "tabpfn", "tabicl", "rf", "xgboost", "e
 const HEAD_LABEL = {probe: "Probe", lightgbm: "LightGBM", tabpfn: "TabPFN", tabicl: "TabICL", rf: "Random forest",
   xgboost: "XGBoost", extra_trees: "Extra trees", mean: "Mean baseline"};
 const SHAPES = ["circle", "square", "diamond", "triangle", "circle"];
-const SCHEME_LABEL = {cv10: "Random 10-fold (grouped by field)", loyo: "Leave one year out", loro: "Leave one region out", loco: "Leave one country out"};
+const SCHEME_LABEL = {cv10: "Random 10-fold (paper reference)", loyo: "Leave one year out", loro: "Leave one region out", loco: "Leave one country out"};
 const INPUT_LABEL = {s2: "S2", "s2-adm": "S2 (ancillary)", latlon: "Lat/lon", mind: "MIND", satclip: "SatCLIP",
   "s2-aligned": "S2 (aligned)", "s2-gdd": "S2 (thermal)", "s2-harmonic": "S2 (harmonic)", biophys: "SNAP", arc: "ARC", arcvae: "ARC-VAE",
   "weather-pheno": "Weather", wofost: "WOFOST", "wofost-da": "WOFOST + ARC LAI", "wofost-da-snap": "WOFOST + SNAP LAI",
@@ -220,7 +220,9 @@ async function load() {
   fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))].sort((a, b) => (b === "yieldsat") - (a === "yieldsat")), d => DATASET_LABEL[d] || d);
   fill("f-testset", [...new Set(ROWS.filter(r => r.dataset === "earthshift").map(r => r.test_set))], t => t);
   document.getElementById("f-testset").addEventListener("change", render);
-  fill("f-scheme", ["cv10", "loyo", "loro", "loco"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
+  // Transfer schemes first: leave one year out is the headline. Random 10-fold is kept as the paper-comparable
+  // reference (test fields share years and farms with training), listed last.
+  fill("f-scheme", ["loyo", "loro", "loco", "cv10"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
   fill("f-model", HEAD_ORDER.filter(m => ROWS.some(r => r.model === m)), m => HEAD_LABEL[m] || m);
   for (const id of ["f-dataset", "f-metric", "f-model"]) document.getElementById(id).addEventListener("change", render);
   document.getElementById("f-view").addEventListener("change", render);
@@ -233,6 +235,9 @@ function fill(id, values, text) {
   const s = document.getElementById(id);
   s.innerHTML = values.map(v => `<option value="${v}">${text(v)}</option>`).join("");
 }
+const CV10_NOTE = "Random 10-fold is the YieldSAT paper's protocol, kept so our numbers can be checked against the " +
+  "paper's. Test fields share years and farms with the training fields, so it measures skill within known conditions, " +
+  "not transfer: leave one year out is the headline comparison.";
 const val = id => document.getElementById(id).value;
 const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
 const lowerBetter = m => m.endsWith("rmse");
@@ -322,7 +327,8 @@ function renderChart(rows, metric, o = {}) {
   svg.innerHTML = g;
   if (o.svg) return;
   document.getElementById("chart-note").textContent =
-    `Mean of the per-subset scores. Each head is averaged over every subset it has finished for that input; a hollow marker means fewer than all ${allSubsets.length} subsets so far. Only filled (complete) markers set the order: inputs with no complete head yet are listed last. Hover a marker for the subsets it covers and their spread.`;
+    `Mean of the per-subset scores. Each head is averaged over every subset it has finished for that input; a hollow marker means fewer than all ${allSubsets.length} subsets so far. Only filled (complete) markers set the order: inputs with no complete head yet are listed last. Hover a marker for the subsets it covers and their spread.` +
+    (val("f-scheme") === "cv10" ? " " + CV10_NOTE : "");
 }
 // ---- Line charts for the early-season and label-efficiency views ----
 // series: [{name, pts: [{x, v, complete, tip}]}]; xs: tick positions; xText: tick label; log: log x axis.
