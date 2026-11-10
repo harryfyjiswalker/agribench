@@ -88,12 +88,19 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 | `biophys` | canopy variables per date (leaf area index, FAPAR, ground cover, canopy chlorophyll and water) from ESA SNAP's biophysical processor, on the `s2-aligned` grid | ~85 |
 | `arc` | ARC retrieval per pixel (crop-model parameters, peak LAI and the LAI curve since sowing), after Whittaker outlier removal; internal testing | ~40 |
 | `arcvae` | ARC crop-model parameters per pixel (canopy scaling and phenology timing, mean and uncertainty) from the ARC-VAE encoder; internal testing | 22 |
+| `weather-pheno` | the field's season weather in agronomic terms, keyed to sowing and to crop stages from accumulated heat: growing degree days, heat stress around flowering, frost, rainfall and a simple soil water balance in the vegetative, flowering and grain-fill windows. One value per field | 69 |
+| `wofost` | the WOFOST crop model run for each field (PCSE): simulated potential and water-limited yield and biomass, peak LAI, flowering and maturity dates, water stress. One value per field | 13 |
+| `wofost-da` | WOFOST corrected during the season by the field's ARC leaf area index (ensemble Kalman filter); `wofost-da-snap` uses the SNAP LAI instead. One value per field | 12 |
 | `latlon` | the pixel's latitude and longitude: the simple control for the location encoders | 2 |
 | `mind` | [MIND](https://arxiv.org/abs/2609.25454) location encoder. Sees only the location. | 3072 |
 | `satclip` | [SatCLIP](https://arxiv.org/abs/2311.17179) location encoder. Sees only the location. | 256 |
 | `galileo` | [Galileo](https://github.com/nasaharvest/galileo)-Base embedding of the pixel's Sentinel-2 time series | 768 |
 | `aef` | [AlphaEarth Foundations](https://arxiv.org/abs/2507.22291) annual embedding for the harvest year | 64 |
 | `tessera` | [TESSERA](https://arxiv.org/abs/2506.20380) annual embedding for the harvest year | 128 |
+| `presto` | [Presto](https://github.com/nasaharvest/presto) embedding of the pixel's in-season Sentinel-2 series (monthly composites at real dates) | 128 |
+| `olmoearth` | [OlmoEarth](https://github.com/allenai/olmoearth_pretrain)-v1.2-Base embedding of the pixel's in-season Sentinel-2 acquisitions at their real dates | 768 |
+| `anysat` | [AnySat](https://github.com/gastruc/AnySat)-Base embedding of the pixel, from in-season Sentinel-2 tiles of its field (spatial context) | 768 |
+| `prithvi` | [Prithvi-EO-2.0](https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL)-300M-TL embedding at the pixel, from 4 in-season Sentinel-2 dates of the field's image (224-px windows) | 1024 |
 | `copernicusfm` | [Copernicus-FM](https://arxiv.org/abs/2503.11849) image embedding of the field's peak-greenness Sentinel-2 scene, sampled at the pixel | 768 |
 | `dofa` | [DOFA](https://arxiv.org/abs/2403.15356) image embedding of the peak-greenness scene, sampled at the pixel | 768 |
 | `croma` | [CROMA](https://arxiv.org/abs/2311.00566) optical-encoder embedding of the peak-greenness scene, sampled at the pixel | 768 |

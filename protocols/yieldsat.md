@@ -227,12 +227,19 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `galileo` | Galileo-Base, 768-d, from the pixel's S2 series | AgriBench |
 | `aef` | AlphaEarth Foundations annual embedding, 64-d | AgriBench |
 | `tessera` | TESSERA annual embedding, 128-d | AgriBench |
+| `presto` | Presto, 128-d, from the pixel's in-season S2 series (monthly composites) | AgriBench |
+| `olmoearth` | OlmoEarth-v1.2-Base, 768-d, from the pixel's in-season S2 acquisitions at their real dates | AgriBench |
+| `anysat` | AnySat-Base, 768-d, from in-season S2 tiles of the field (pixel token with field context) | AgriBench |
+| `prithvi` | Prithvi-EO-2.0-300M-TL, 1024-d, from 4 in-season S2 dates of the field's Raw raster (224 px windows) | AgriBench |
 | `s2-aligned` | 12 S2 bands interpolated onto a fixed grid of days since sowing (every 15 days) | AgriBench: season-aligned version of `s2` |
 | `s2-gdd` | 12 S2 bands interpolated onto a fixed grid of growing degree days since sowing | AgriBench: thermal-time version of `s2-aligned` |
 | `s2-harmonic` | per band, 5 harmonic-regression coefficients (2 harmonics) over days since sowing | AgriBench: compact gap-robust summary |
 | `biophys` | LAI, FAPAR, FCOVER, canopy chlorophyll, canopy water (SNAP S2 biophysical processor) on days since sowing | AgriBench: physically based canopy variables |
 | `arc` | ARC retrieval: 15 crop-model parameters, peak LAI and the LAI trajectory on days since sowing | AgriBench, internal testing: physics-based season retrieval |
 | `arcvae` | 11 ARC crop-model parameters (canopy scaling and phenology timing), posterior mean and SD from ARC-VAE | AgriBench, internal testing: physics-guided season summary |
+| `weather-pheno` | 69 agronomic weather summaries per field in thermal-time crop-stage windows from sowing (GDD, heat, frost, rain, water balance) | AgriBench: year-level weather keyed to the crop calendar |
+| `wofost` | WOFOST 7.2 (PCSE) per field: potential and water-limited yield and biomass, max LAI, flowering and maturity, water stress (13) | AgriBench: process-based crop model |
+| `wofost-da`, `wofost-da-snap` | WOFOST 7.2 water-limited ensemble with field LAI assimilated by an EnKF (ARC or SNAP LAI), 12 | AgriBench: crop model + satellite hybrid |
 | `copernicusfm` | Copernicus-FM ViT-B/16, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, spectral hypernetwork, MAE + distillation |
 | `dofa` | DOFA ViT-B/16, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, wavelength-conditioned MAE |
 | `croma` | CROMA base optical encoder, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, radar-optical contrastive + MAE |
@@ -273,6 +280,51 @@ SHA-256 and the runner refuses a mismatch):
   the file's time reference + slot offset (checked against the Raw S2 acquisition dates on 25 fields per subset). Weather,
   topography and location are left out on purpose, so `galileo` is comparable to `s2` and location only enters
   through the location encoders. Mean of the encoder's tokens (Galileo `average_tokens`), 768-d.
+- **Time-series foundation models, in-season** [AgriBench]. `aef` and `tessera` are annual products: one
+  embedding per calendar year, computed by their providers from the whole year. The models below instead see only
+  the field's own season, i.e. the S2 observations in its 24 slots, at their real dates (file time reference +
+  slot offset, checked against the Raw acquisition dates on 25 fields per subset, as for `galileo`). This is the
+  "annual summary vs in-season embedding" comparison. Only S2 goes in: no weather, topography or location, so
+  they compare with `s2` and `galileo`. Upstream code and weights are pinned under `upstream/<name>/` and loaded
+  with `weights_only=True`.
+  - `presto/` (`tools/embed_yieldsat_presto.py`): Presto (nasaharvest/presto 11e207a, `default_model.pt`), pixel.
+    Presto was pretrained on monthly composites, so each pixel's valid observations are averaged per calendar month
+    over the field's span of months (median 8–12, at most 13). Each month gets its calendar month token, and months
+    without an observation are masked. Input: 10 S2 bands / 10,000 plus NDVI. S1, ERA5, SRTM and Dynamic World are
+    masked. Presto always adds a location token that cannot be masked, so lat/lon is fixed at (0, 0) for every
+    pixel. Output: the encoder's mean token, 128-d.
+  - `olmoearth/` (`tools/embed_yieldsat_olmoearth.py`): OlmoEarth-v1.2-Base (`allenai/OlmoEarth-v1_2-Base` at Hub
+    revision 2e99a73, code allenai/olmoearth_pretrain 13ca06f), pixel. Each pixel is a 1 × 1 image with patch size 1,
+    which the upstream inference guide supports. Its valid acquisitions (median 6–8 per pixel) go in at their real
+    dates, which the model reads through temporal RoPE. Input: all 12 L2A bands with the upstream "computed"
+    normalisation. The model takes at most 12 timesteps; the 0.8% of ARG-C pixels with 13 have their two
+    closest-in-time observations averaged. Only valid observations are passed: the encoder's inference path attends
+    to every token it is given, including masked ones. Pixels are batched by their number of observations. Output:
+    mean of the output tokens over time, 768-d.
+  - `anysat/` (`tools/embed_yieldsat_anysat.py`): AnySat-Base (gastruc/AnySat 5f6f475, `g-astruc/AnySat` revision
+    63f2521, `models/AnySat.pth`), patch with field context. Each field's raster is rebuilt from the v1 row/col and
+    cut into 24 × 24-pixel tiles (240 m) with AnySat patch size 10 m: a per-pixel temporal encoder (L-TAE), then
+    a spatial transformer across the tile. The output is the pixel's own patch token (768-d). The preprocessed
+    file only has yield-map pixels, so the context is the field itself; cells outside the yield map get the field's
+    mean series. AnySat takes one date list per tile and has no per-timestep mask. So slots where fewer than 10% of
+    the field's pixels are valid are dropped, and the remaining gaps in each pixel are filled by linear
+    interpolation in time. Dates are days since the 1st of the month of the field's first kept slot (as AnySat's
+    PASTIS loader counts from a season start). Band normalisation: mean and std of valid S2 values from a seeded
+    sample pooled over all nine subsets, because AnySat normalises each dataset with its own statistics. The
+    sample includes cloudy observations (the preprocessed file has no cloud mask), which inflates the std of the
+    visible bands; AnySat's input MLP applies GroupNorm after its first layer, so a uniform rescale mostly cancels.
+  - `prithvi/` (`tools/embed_yieldsat_prithvi.py`): Prithvi-EO-2.0-300M-TL (`ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL`
+    revision 63adbd3), a multi-temporal patch model: 3D patches of 1 frame × 16 × 16 px, pretrained on 4-frame HLS
+    stacks with (year, day of year) per frame. Space: the field's Raw S2 raster (the bounding box with its real
+    surroundings) via `tools/yieldsat_patches.py`, in 224 × 224 windows at native 10 m. Each labelled pixel uses the
+    window whose centre is nearest, and takes the last-layer token grid averaged over the 4 frames, sampled
+    bilinearly at the pixel centre. One token covers 160 m, so within-field detail comes only from the
+    interpolation. Time: 4 label-free dates from the field's season, sorted: the first clear in-season acquisition
+    plus the helper's green-up, peak and senescence dates (clear = SCL clear on ≥ 90% of the labelled pixels; the
+    date can repeat when there are few clear dates). In GER-R the median dates are 8, 136, 265 and 295 days after
+    sowing. Prithvi applies its temporal encoding only for its pretraining frame count of 4. Bands: B02, B03, B04,
+    B8A, B11, B12 as HLS B02–B07, in DN, with the checkpoint's mean and std. The TL variant's location input is not
+    used. Output: 1024-d.
 - `aef/` (`tools/extract_yieldsat_aef.py`): the 64-d AlphaEarth annual embedding of the calendar year of the
   field's harvest date, read with HTTP range requests from the Source Cooperative mirror. AEF starts in 2017,
   so the 48 German fields harvested in 2016 have no AEF value (imputed by the runner, and counted in the json).
@@ -325,6 +377,51 @@ SHA-256 and the runner refuses a mismatch):
   calendar, so each observation's day of year is replaced by 120 + days since sowing (observations outside
   1–365 dropped), which makes the phenology outputs relative to sowing. Crops other than maize are outside its
   training distribution.
+- `weather-pheno/` (`tools/build_yieldsat_weather_pheno.py`) [AgriBench]: does year-level weather fix the poor
+  LOYO/LORO transfer of imagery? `s2-adm` holds weather only as calendar-month slots; this input summarises each
+  field's daily ERA5 file (`Raw/.../weather/`) in agronomic terms keyed to its sowing date. Crop stages come from
+  thermal time since sowing (the `s2-gdd` GDD definition), with one constant per crop for flowering and maturity
+  (wheat 1650/2400 °C·d at base 0 °C, maize 800/1500 and soybean 750/1650 at base 10 °C, rapeseed 850/1750 at
+  base 5 °C; literature ranges, chosen so maturity falls 1–3 weeks before each subset's median sowing-to-harvest
+  thermal time, a per-subset check, never a field's own harvest date). Windows: 60 days before sowing,
+  early and late vegetative, flowering (±10 % around the flowering constant), grain fill, whole season. Per window:
+  length, mean Tmean and Tmax, heat degree-days above a crop threshold on Tmax (wheat 32, maize and soybean 35,
+  rapeseed 29 °C), frost days (Tmin < 0 and < −5 °C), rainfall, Hargreaves ET0 (radiation exists only in Germany
+  and Uruguay, so every country uses Hargreaves), rainfall − ET0, longest dry spell and the water-stress index
+  1 − AET/ETc of a 150 mm bucket with FAO-56-style crop coefficients. Plus sowing day of year, days to flowering
+  and maturity, soil water at sowing and flowering, GDD in the first 30/60/90 days and the season's minimum Tmin.
+  **Leakage guard:** every weather file runs from 60 days before sowing to exactly 60 days after harvest (all
+  2,173 fields), so a field's record end would reveal its harvest date. The builder reads weather only up to
+  sowing + a cap that is one constant per subset (the shortest record in the subset: ARG-C 188, ARG-S 141, ARG-W
+  205, BRA-C 177, BRA-S 171, BRA-W 185, GER-R 368, GER-W 318, URG-S 183 days), so windows are truncated in the same
+  way for every field. Estimated maturity falls within the cap for every field except 33 % of ARG-S (where the
+  grain-fill window ends at the cap). Pixels of a field share its values.
+- `wofost/` (`tools/build_yieldsat_wofost.py`, shared set-up in `tools/yieldsat_wofost.py`) [AgriBench]: WOFOST
+  7.2 through PCSE 6.0.13 (layered venv `envs/pcse`, `tools/setup_pcse_env.sh`), potential (`Wofost72_PP`) and
+  water-limited (`Wofost72_WLP_CWB`) runs per field from sowing to maturity or the subset cap above. Weather: the
+  same ERA5 files and cap, radiation by Hargreaves, vapour pressure from Tmin, wind 2 m/s, E0/ES0/ET0 by PCSE's
+  Penman(-Monteith). Soil: the SoilGrids layers already in the v1 cache (the `s2-adm` static bands), field mean of
+  sand, clay, organic carbon and coarse fragments over 0–100 cm → wilting point, field capacity, saturation and
+  conductivity by Saxton & Rawls (2006); rooting depth 100 cm; root zone half full 60 days before sowing. Crop:
+  default WOFOST 7.2 parameter sets (ajwdewit/WOFOST_crop_parameters, branch `wofost72`, pinned): Winter_wheat_101,
+  Grain_maize_201, Soybean_901, Oilseed_rape_1001. These are European calibrations, so phenology is replaced by the
+  `weather-pheno` thermal-time constants (temperature-only development, IDSL = 0; DTSMTB linear from the crop's
+  base temperature to 30 °C; TSUM1 = flowering − TSUMEM, TSUM2 = maturity − flowering); all other crop parameters
+  stay default and nothing is calibrated on yield, so absolute yields are indicative and the features act as
+  relative, year-sensitive indices. 13 features: potential and water-limited grain yield, biomass and max LAI,
+  water-limited LAI at flowering and transpiration, their yield ratio, a transpiration-deficit water-stress index,
+  simulated days to flowering and maturity, and root-zone available water. Slurm array of 60-field chunks, about
+  1 s per field.
+- `wofost-da/`, `wofost-da-snap/` (`tools/build_yieldsat_wofost_da.py`) [AgriBench]: the classic crop-model +
+  satellite hybrid. WOFOST water-limited as `wofost`, as an ensemble of 32 members with perturbed LAI-related
+  parameters (TDWI × lognormal(0, 0.3); SPAN × N(1, 0.1); SLATB and AMAXTB × N(1, 0.15); TSUM1 × N(1, 0.05); initial
+  water × U(0.5, 1.5)), corrected by a stochastic ensemble Kalman filter on the LAI state (PCSE `set_variable`,
+  which rescales leaf biomass) at each observation of the field-median satellite LAI on the `s2-aligned` grid (days
+  1 to the cap, at least 5 valid pixels; observation SD max(0.3, 0.15 LAI)). LAI source: `arc` → `wofost-da`, SNAP
+  `biophys` → `wofost-da-snap`. 12 features: ensemble mean and SD of grain yield, mean biomass, max LAI, LAI at
+  flowering, transpiration, days to flowering and maturity, the number of observations assimilated, the mean and
+  mean absolute innovation (observed − forecast LAI) and the largest observed LAI. Per-field seeds make it
+  reproducible.
 - **Patch (image) foundation models** (`tools/patch_embed.py`, `tools/yieldsat_patches.py`) [AgriBench]:
   `copernicusfm/`, `dofa/`, `croma/`, `softcon/`. These models embed an image, not a pixel series. Each field's
   Raw folder holds its own rasters (12-band S2 L2A GeoTIFF per acquisition, SCL, DEM) on the field's bounding box

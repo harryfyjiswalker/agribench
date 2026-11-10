@@ -95,7 +95,7 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
 
   <section class="card ys">
     <h2>Which representation works best?</h2>
-    <p class="note" id="chart-note">Mean over subsets that have a result for every head shown. Hover a marker for the per-subset spread.</p>
+    <p class="note" id="chart-note">Mean of the per-subset scores, per head. Hollow markers cover fewer than all subsets so far.</p>
     <div class="legend" id="legend"></div>
     <div class="chart-wrap"><svg id="chart" role="img" aria-label="Score by input and head"></svg></div>
   </section>
@@ -139,7 +139,7 @@ const HEAD_LABEL = {probe: "Linear probe", lightgbm: "LightGBM", tabpfn: "TabPFN
 const SHAPES = ["circle", "square", "diamond", "triangle"];
 const SCHEME_LABEL = {cv10: "Random 10-fold (grouped by field)", loyo: "Leave one year out", loro: "Leave one region out", loco: "Leave one country out"};
 const INPUT_LABEL = {"s2": "Raw S2", "s2-adm": "Raw S2 + weather, soil, topo", latlon: "Lat/lon", mind: "MIND", satclip: "SatCLIP",
-  "s2-aligned": "S2 aligned to sowing", "s2-gdd": "S2 on thermal time", "s2-harmonic": "S2 harmonics", biophys: "Biophysical (SNAP)", arc: "ARC", arcvae: "ARC-VAE", galileo: "Galileo", aef: "AlphaEarth", tessera: "TESSERA", copernicusfm: "Copernicus-FM", dofa: "DOFA", croma: "CROMA", softcon: "SoftCon"};
+  "s2-aligned": "S2 aligned to sowing", "s2-gdd": "S2 on thermal time", "s2-harmonic": "S2 harmonics", biophys: "Biophysical (SNAP)", arc: "ARC", arcvae: "ARC-VAE", "weather-pheno": "Weather by crop stage", wofost: "WOFOST", "wofost-da": "WOFOST + ARC LAI (EnKF)", "wofost-da-snap": "WOFOST + SNAP LAI (EnKF)", galileo: "Galileo", aef: "AlphaEarth", tessera: "TESSERA", presto: "Presto", olmoearth: "OlmoEarth", anysat: "AnySat", prithvi: "Prithvi-EO-2.0", copernicusfm: "Copernicus-FM", dofa: "DOFA", croma: "CROMA", softcon: "SoftCon"};
 const DATASET_LABEL = {yieldsat: "YieldSAT (yield)", earthshift: "EarthShift (field delineation)"};
 const ES_MODEL_LABEL = {resnet50: "ResNet-50", "resnet50-imagenet": "ResNet-50 (ImageNet)", "resnet50-random": "ResNet-50 (random init)", galileo: "Galileo", "galileo-base": "Galileo base"};
 const ES_SETTING_LABEL = {frozen: "frozen encoder", full: "full fine-tuning"};
@@ -170,7 +170,7 @@ async function load() {
   }
   document.getElementById("meta").textContent =
     `${ROWS.length} result rows · updated ${index.updated} · sweeps: ${[...new Set(ROWS.map(r => r.sweep).filter(Boolean))].join(", ")}`;
-  fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))], d => DATASET_LABEL[d] || d);
+  fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))].sort((a, b) => (b === "yieldsat") - (a === "yieldsat")), d => DATASET_LABEL[d] || d);
   fill("f-testset", [...new Set(ROWS.filter(r => r.dataset === "earthshift").map(r => r.test_set))], t => t);
   document.getElementById("f-testset").addEventListener("change", render);
   fill("f-scheme", ["cv10", "loyo", "loro", "loco"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
@@ -218,23 +218,20 @@ function renderChart(rows, metric) {
   const svg = document.getElementById("chart");
   const heads = HEAD_ORDER.filter(m => m !== "mean" && rows.some(r => r.model === m)).slice(0, 4);
   const inputs = [...new Set(rows.map(r => r.input))];
-  // Per input: only the subsets every head with results for that input has, so heads compare on equal terms.
-  const allSubsets = [...new Set(rows.map(r => r.subset))];
-  const subsetsOf = {};
-  for (const i of inputs) {
-    const hs = heads.filter(h => rows.some(r => r.input === i && r.model === h));
-    subsetsOf[i] = allSubsets.filter(s => hs.every(h => rows.some(r => r.input === i && r.model === h && r.subset === s)));
-  }
+  // Each head is averaged over every subset it has finished for that input; a hollow marker means not all yet.
+  const allSubsets = [...new Set(rows.map(r => r.subset))].sort();
   const pts = [];
   for (const i of inputs) for (const h of heads) {
-    const rs = rows.filter(r => r.input === i && r.model === h && subsetsOf[i].includes(r.subset));
+    const rs = rows.filter(r => r.input === i && r.model === h && get(r, metric) != null && !isNaN(get(r, metric)));
     if (rs.length) pts.push({input: i, head: h, v: mean(rs.map(r => get(r, metric))), n: rs.length,
+      subsets: rs.map(r => r.subset).sort(), complete: rs.length >= allSubsets.length,
       lo: Math.min(...rs.map(r => get(r, metric))), hi: Math.max(...rs.map(r => get(r, metric)))});
   }
   const best = i => { const ps = pts.filter(p => p.input === i).map(p => p.v); return ps.length ? (lowerBetter(metric) ? -Math.min(...ps) : Math.max(...ps)) : -Infinity; };
   inputs.sort((a, b) => best(b) - best(a));
   document.getElementById("legend").innerHTML = heads.map((h, k) =>
-    `<span><svg width="14" height="14">${marker(SHAPES[k], 7, 7, 5, `var(--series-${k + 1})`)}</svg>${HEAD_LABEL[h] || h}</span>`).join("");
+    `<span><svg width="14" height="14">${marker(SHAPES[k], 7, 7, 5, `var(--series-${k + 1})`)}</svg>${HEAD_LABEL[h] || h}</span>`).join("") +
+    (pts.some(p => !p.complete) ? `<span><svg width="14" height="14">${marker("circle", 7, 7, 4.5, "var(--text-secondary)", false, true)}</svg>Hollow: not all ${allSubsets.length} subsets yet</span>` : "");
   if (!pts.length) { svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">No results for this selection yet.</text>`; return; }
   const W = Math.max(svg.parentElement.clientWidth, 520), L = 220, R = 24, T = 28, rowH = 34, H = T + inputs.length * rowH + 8;
   svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -250,18 +247,19 @@ function renderChart(rows, metric) {
   inputs.forEach((i, r) => {
     const y = T + r * rowH + rowH / 2;
     g += `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="var(--grid)" stroke-width="1" stroke-dasharray="2 4"/>`;
-    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${label(i)}${subsetsOf[i].length < allSubsets.length ? ` <tspan style="fill:var(--text-muted)">(${subsetsOf[i].length}/${allSubsets.length})</tspan>` : ""}</text>`;
+    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${label(i)}</text>`;
     heads.forEach((h, k) => {
       const p = pts.find(q => q.input === i && q.head === h); if (!p) return;
-      const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${p.n} subsets: ${fmt(metric, p.v)}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}${p.v < lo ? "<br>Below the axis: drawn at its left edge" : ""}`;
+      const cover = p.complete ? `all ${allSubsets.length} subsets` : `${p.n} of ${allSubsets.length} subsets (${p.subsets.join(", ")})`;
+      const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${cover}: ${fmt(metric, p.v)}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}${p.v < lo ? "<br>Below the axis: drawn at its left edge" : ""}`;
       if (p.v < lo) g += `<text x="${x(lo) + 10}" y="${y + 4}" style="fill:var(--text-muted)">◀ ${fmt(metric, p.v)}</text>`;
-      g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">${marker(SHAPES[k], x(p.v), y, 5.5, `var(--series-${k + 1})`, true)}` +
+      g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">${marker(SHAPES[k], x(p.v), y, 5.5, `var(--series-${k + 1})`, true, !p.complete)}` +
            `<circle cx="${x(p.v)}" cy="${y}" r="12" fill="transparent"/></g>`;
     });
   });
   svg.innerHTML = g;
   document.getElementById("chart-note").textContent =
-    `Mean of the per-subset scores. For each input, only subsets that every shown head has are used; (k/${allSubsets.length}) marks an input with results on k subsets so far. Hover a marker for the spread across subsets.`;
+    `Mean of the per-subset scores. Each head is averaged over every subset it has finished for that input; a hollow marker means fewer than all ${allSubsets.length} subsets so far, so it may not be comparable with the filled ones yet. Hover a marker for the subsets it covers and their spread.`;
   svg.querySelectorAll(".pt").forEach(el => hover(el, el.dataset.tip));
 }
 function renderEarthShift(rows) {
@@ -304,8 +302,10 @@ function renderEarthShift(rows) {
     `<td>${pm(r.delta_mean, r.delta_std)}</td><td>${pm(r.rho_mean, r.rho_std)}</td><td>${f1(r.id_boundary_iou_mean)}</td><td>${f1(r.ood_boundary_iou_mean)}</td></tr>`;
   t.innerHTML = h + "</tbody>";
 }
-function marker(shape, cx, cy, r, color, ring) {
-  const s = ring ? `stroke="var(--surface-1)" stroke-width="2"` : "";
+function marker(shape, cx, cy, r, color, ring, hollow) {
+  // hollow: outline in the series colour on the surface fill (a partial result)
+  const s = hollow ? `stroke="${color}" stroke-width="2"` : ring ? `stroke="var(--surface-1)" stroke-width="2"` : "";
+  if (hollow) { r -= 1; color = "var(--surface-1)"; }
   if (shape === "square") return `<rect x="${cx - r}" y="${cy - r}" width="${2 * r}" height="${2 * r}" rx="1.5" fill="${color}" ${s}/>`;
   if (shape === "diamond") return `<polygon points="${cx},${cy - r * 1.25} ${cx + r * 1.25},${cy} ${cx},${cy + r * 1.25} ${cx - r * 1.25},${cy}" fill="${color}" ${s}/>`;
   if (shape === "triangle") return `<polygon points="${cx},${cy - r * 1.2} ${cx + r * 1.15},${cy + r * 0.9} ${cx - r * 1.15},${cy + r * 0.9}" fill="${color}" ${s}/>`;
