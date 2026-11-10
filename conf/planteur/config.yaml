@@ -1,0 +1,27 @@
+# PLANTEUR runner config (protocols/planteur.md). Choose a split (and an island for LOIO), an input and a model:
+#   sbatch planteur.sbatch split=default input=emb-aef model=probe experiment.confirm_test=true
+#   sbatch planteur.sbatch split=loio fold=reunion input=emb-tessera-v2 model=lightgbm experiment.confirm_test=true
+# Without confirm_test the run trains, selects on val and reports val only: both test sets are final tests (3.7).
+defaults:
+  - model: probe
+  - _self_
+split: default      # default (splits/443.json, test fold 5) | loio (splits/loio.json)
+fold: default       # default | reunion guadeloupe martinique guyane mayotte (split=loio)
+input: emb-aef      # s2-monthly | emb-aef | emb-tessera-v1 | emb-tessera-v1.1 | emb-tessera-v2 | emb-olmoearth-v1.3
+paths:
+  project: ${oc.env:AGRIBENCH_PROJECT,/lustre/shared/agriscience-benchmark}
+  features: ${oc.env:AGRIBENCH_PLANTEUR_FEATURES,${paths.project}/features/planteur}
+  runs: ${oc.env:AGRIBENCH_RUNS,${paths.project}/runs/planteur}
+experiment:
+  seed: 0               # the paper's single run; also the seed of the official few-shot pixels (D5)
+  pixel_cap: 256        # training pixels per patch for heads with regime=cap (3.6)
+  fewshot: null         # train on the few-shot pixels, X per class (10, 25, 100, 1000); overrides the head's regime
+  months: null          # early season: keep only the first k monthly mosaics (s2-monthly)
+  confirm_test: false   # score the test set and append to the test ledger (3.7)
+  smoke: false          # plumbing check: 40 train / 10 val / 10 test patches, 16 px per patch, 2 epochs
+  predict_batch: 1000000
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: ${paths.runs}/${oc.env:USER}/${now:%Y%m%d-%H%M%S}-${oc.env:SLURM_JOB_ID,local}
