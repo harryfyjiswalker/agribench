@@ -442,44 +442,67 @@ Filled in as `pa1` finishes; see the dashboard for the live table.
 
 ## 7. Phase B plan [AgriBench]
 
-Phase B adds the frozen encoders AgriBench already wraps for YieldSAT, then early season and label efficiency. Every
-new input is written as a `features/planteur/<name>/` table aligned with `meta.npz`, so the runner, the heads and
-the sweep tool need no change beyond a line in `tools/planteur.INPUTS`, and the probe is the reference head for
-all of them.
+Phase B adds the frozen encoders and inputs AgriBench already wraps for YieldSAT, then early season and label
+efficiency. [`tools/planteur_embed.py`](../tools/planteur_embed.py) builds every new input from
+`DATA_S2_MONTHLY` (month m dated at its mid-point, 2019-01-01 + 30 m + 15 days) and reuses the YieldSAT wrappers'
+model loading, normalisation and `encode` code (`tools/embed_yieldsat_<model>.py`), so each model sees its input
+the way it does for YieldSAT. Nothing reads a label, the void mask or a `NORM_*` file. Each input is built on CPU
+as a Slurm array over the 2,750 patches plus a combine step, from a frozen copy of the commit, which `info.json`
+records.
+
+**Storage.** An encoder output is kept as one token grid per patch (`grid.npy`, patches × g × g × D, float16)
+instead of a per-pixel table: a 768-d table over 45 M pixels would be ~70 GB per encoder, and Lustre is nearly
+full. The runner samples a pixel's feature from its patch's grid bilinearly at the pixel centre, border-clamped
+(the `sample_tokens` rule YieldSAT uses). The heads see exactly the per-pixel features the paper's "upsample
+bilinearly" step makes. The probe reads its training table in chunks, so it never holds a float32 copy, and its
+CPU memory follows the input width (36 M rows × D in float16). MIND (3,072-d) is too wide for the all-pixel probe
+on one node, so it gets the other heads only.
+
+**Shared inputs.** `peak month`: the month with the highest median NDVI over the whole 128 × 128 patch, among
+months with at least 50% of pixels observed (else the best-covered month). It is label-free. Gaps in a window's
+month are filled with that window-month's band median. A month observed on less than 50% of a window is masked
+or left out.
 
 ### 7.1 Encoders the paper also reports (Table 2 frozen-encoder rows)
 
-Input: the 12 monthly S2 mosaics, the 10 `DATA_S2` bands, months dated at their mid-points in 2019 (`MONTHLY/months.json`).
-Pixel features as the paper makes them (3.5): the encoder's token grid, **mean-pooled over 16 × 16 pixel windows**,
-then upsampled bilinearly to the 128 × 128 label grid.
+| Input | Encoder and settings | Paper |
+|---|---|---|
+| `galileo` | Galileo base, 10 S2 bands + NDVI, 12 monthly steps (month tokens 0-11), 16 × 16 px windows at patch size 4, `average_tokens` per window → 8 × 8 grid | 34.71 |
+| `presto` | Presto, per pixel (patch size 1), 10 S2 bands / 10⁴ + NDVI, 12 monthly steps, the patch centre's lat/lon, pooled over 16 × 16 px windows → 8 × 8 grid | 16.25 |
 
-| Input | Encoder and settings | Reuses | Paper |
-|---|---|---|---|
-| `galileo-base` | Galileo base, patch size 4, S2 only, 12 monthly steps | `tools/embed_yieldsat_galileo.py`, `tools/extract_galileo.py` | 34.71 |
-| `presto-base` | Presto, patch size 1 (per pixel), S2 only, 12 monthly steps, the patch centre's lat/lon | `tools/embed_yieldsat_presto.py` | 16.25 |
-
-Presto's per-pixel features are pooled over the same 16 × 16 windows, to match the paper's setting. Both are
-cross-checked against the paper's numbers before anything else uses them.
+These follow the paper's settings (3.5: patch 4 / window 16 for Galileo, patch 1 / window 16 for Presto). For
+YieldSAT, Galileo and Presto withhold location; here Presto keeps the patch centre as the paper does.
 
 ### 7.2 Further time-series encoders
 
-Same input and pooling, adapted from the YieldSAT wrappers:
-
-- **OlmoEarth v1.2 Base**, pixel patch 1 with the real month dates (`tools/embed_yieldsat_olmoearth.py`). This
-  can be checked against the shipped v1.3 embedding.
-- **AnySat** on the first 96 S2 observations of 2019 (`DATA_S2`, as in `card:326-327`), so it follows the paper's
-  input instead of the monthly one (`tools/embed_yieldsat_anysat.py`).
-- **Prithvi-EO-2.0 300M-TL**, 224-px windows reflect-padded from each 128-px patch, 4 monthly steps (the first
-  month, then the months of the patch's NDVI rise, peak and decline, chosen from the imagery only, not the labels)
-  (`tools/embed_yieldsat_prithvi.py`).
+| Input | Encoder and settings |
+|---|---|
+| `olmoearth` | OlmoEarth-v1.2-Base, all 12 L2A bands, month mid-point timestamps, 16 × 16 px windows at patch size 4, mean of the window's tokens → 8 × 8. It differs from the shipped `emb-olmoearth-v1.3` (v1.3, 128-d projected read-out). YieldSAT runs it per pixel at patch size 1; over 45 M pixels that would cost about 100× more on CPU, and the pooling is over 16 px windows anyway. |
+| `prithvi` | Prithvi-EO-2.0-300M-TL, the 6 HLS-equivalent bands of 4 label-free months (January, NDVI rise, peak, decline; `prithvi_months`), a 224 px window centred on the patch with reflection padding, (2019, day of year) coordinates, tokens averaged over frames → 14 × 14 |
+| `anysat` | AnySat-Base on the first 96 `DATA_S2` observations of 2019 (the paper's AnySat input, card), the patch as one tile, patch size 160 m: one token per 16 × 16 px → 8 × 8. Band mean/std from a seeded, label-free sample of `DATA_S2`. |
 
 ### 7.3 Single-date (patch) encoders
 
-Copernicus-FM, DOFA, CROMA and SoftCon via `tools/patch_embed.py` (`tools/yieldsat_patches.py` supplies the
-YieldSAT windows; a PLANTEUR adapter supplies one image per patch). The date is the patch's **peak-greenness
-month** (highest median NDVI over the patch), chosen from the imagery only. The token grid is upsampled
-bilinearly to pixels, with no extra pooling (these encoders' tokens are already 8–16 px). TerraMind, THOR, Clay and
-SatMAE follow once the single-date session's terratorch environment exists.
+Copernicus-FM, DOFA, CROMA, SoftCon, Clay, SatMAE, THOR and TerraMind take the patch's peak month (12 L2A bands
+in the YieldSAT order, NaN → band median) through their YieldSAT `prepare` and `encode`, each at its native window.
+A window larger than 128 px (224, 256 or 288) is centred and reflect-padded, as YieldSAT pads small fields. CROMA
+(120 px) and SatMAE (96 px) are tiled 2 × 2 at token-aligned offsets, with overlapping tokens averaged into one
+16 × 16 grid. TerraMind takes S2 only, because PLANTEUR has no DEM. Clay, SatMAE, THOR and TerraMind run in the
+layered `envs/patchfm`.
+
+### 7.3b Non-encoder inputs
+
+- `latlon`: lat/lon of 8 × 8 cell centres per patch (from the `ANNOTATIONS_GEOTIFF` CRS and transform).
+  `satclip` and `mind` run the SatCLIP / MIND location encoders on the same points.
+- `s2-harmonic`: per pixel and band, c0 + 2 harmonics fitted to the 12 monthly values (t = day of year,
+  365-day period, ridge 0.5), 10 bands × 5 = 50 features (`build_yieldsat_s2_harmonic.fit`).
+- `biophys`: the SNAP S2 biophysical networks per pixel and month (LAI, FAPAR, FCOVER, CCC, CWC × 12 = 60),
+  with the sun zenith at the patch centre's latitude and the month mid-point.
+- Left out: crop-calendar-aligned S2, GDD, WOFOST, ARC and the crop-stage weather summaries. They need the crop
+  type and sowing date, which are the target here.
+
+Every new input runs with LightGBM and the probe (both CPU) on the default split and LOIO in sweep `pb1`, with
+TabPFN and TabICL on GPU at low priority.
 
 ### 7.4 Early season
 
