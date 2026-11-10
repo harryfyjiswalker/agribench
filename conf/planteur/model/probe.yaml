@@ -1,0 +1,9 @@
+# The paper's linear probe (protocols/planteur.md 3.6, D4): every training pixel, 50 epochs, AdamW, batch 4096,
+# learning rate from np.geomspace(1e-4, 0.5, 8) chosen by val mIoU-8. GPU (tools/planteur_probe.py).
+name: probe
+kind: probe
+regime: all
+epochs: 50
+batch: 4096
+lr_geomspace: [1.0e-4, 0.5, 8]   # np.geomspace(start, stop, num)
+weight_decay: 0.01

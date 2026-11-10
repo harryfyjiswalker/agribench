@@ -1,0 +1,4 @@
+# Trivial reference row (paper Tables 2 and 6): predict Background everywhere.
+name: background
+kind: constant
+regime: none

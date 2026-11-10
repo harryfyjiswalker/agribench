@@ -77,6 +77,9 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
     each dataset's official cross-validation, with a fixed set of heads. Leave-one-year-out and leave-one-region-out default to R² pooled over folds.</p>
   <p class="lede es hidden">EarthShift field delineation: segmentation models trained on one region or year (in-distribution, ID) and
     tested on another (out-of-distribution, OOD), following the EarthShift paper's tasks and metrics. Scores are mIoU in percentage points, mean over seeds.</p>
+  <p class="lede pl hidden">PLANTEUR crop-type segmentation in France's tropical overseas territories: per-pixel heads on frozen
+    representations, scored by mIoU over the 8 classes (Background included, void excluded), in percent. The headline is leave one
+    island out (LOIO: train on four territories, test on the fifth; mean of the five), with the in-domain default test split beside it.</p>
   <p class="meta" id="meta">Loading results…</p>
 
   <section class="card">
@@ -173,9 +176,28 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
     <div class="table-wrap"><table id="es-table"></table></div>
   </section>
 
+  <section class="card pl hidden">
+    <h2>In-domain test vs an unseen island</h2>
+    <p class="note">Each row is one input and head. The circle is the default split's test score (443 patches, in-domain), the
+      square the LOIO mean (each territory held out in turn); the gap is what is lost on an unseen island. Hollow markers are
+      the paper's numbers for the same row, where it has one (Tables 2 and 6). Hover for OA and the chosen setting.</p>
+    <div class="legend" id="pl-legend"></div>
+    <div class="chart-wrap"><svg id="pl-chart" role="img" aria-label="Default-split and LOIO mIoU-8 by input and head"></svg></div>
+  </section>
+
+  <section class="card pl hidden">
+    <h2>Per island</h2>
+    <p class="note">mIoU-8 (%) on each held-out territory, their unweighted mean (the headline, as in paper Table 6), and the
+      default-split test (paper Table 2). "Paper" columns repeat the authors' value for the same input and head. Mayotte is 99%
+      Background, so predicting Background everywhere already scores 12.4 there. Few-shot rows (TabPFN, TabICL) train on 1,000
+      pixels per class and compare with paper Table 7, not Table 2. Click a header to sort.</p>
+    <div class="table-wrap"><table id="pl-table"></table></div>
+  </section>
+
   <footer>
     Protocols: <a href="https://github.com/harryfyjiswalker/agribench/blob/main/protocols/yieldsat.md">YieldSAT</a>,
-    <a href="https://github.com/harryfyjiswalker/agribench/blob/main/protocols/earthshift.md">EarthShift</a> ·
+    <a href="https://github.com/harryfyjiswalker/agribench/blob/main/protocols/earthshift.md">EarthShift</a>,
+    <a href="https://github.com/harryfyjiswalker/agribench/blob/main/protocols/planteur.md">PLANTEUR</a> ·
     Code and raw tables: <a href="https://github.com/harryfyjiswalker/agribench">github.com/harryfyjiswalker/agribench</a>
     (<code>results/</code>). Leave one country out is the final evaluation: it is never used to choose models.
   </footer>
@@ -192,7 +214,22 @@ const INPUT_LABEL = {s2: "S2", "s2-adm": "S2 (ancillary)", latlon: "Lat/lon", mi
   "weather-pheno": "Weather", wofost: "WOFOST", "wofost-da": "WOFOST + ARC LAI", "wofost-da-snap": "WOFOST + SNAP LAI",
   galileo: "Galileo", aef: "AlphaEarth", tessera: "TESSERA", presto: "Presto", olmoearth: "OlmoEarth", anysat: "AnySat",
   prithvi: "Prithvi", copernicusfm: "Copernicus-FM", dofa: "DOFA", croma: "CROMA", softcon: "SoftCon", terramind: "TerraMind", clay: "Clay", satmae: "SatMAE", thor: "THOR"};
-const DATASET_LABEL = {yieldsat: "YieldSAT (yield)", earthshift: "EarthShift (field delineation)"};
+const DATASET_LABEL = {yieldsat: "YieldSAT (yield)", earthshift: "EarthShift (field delineation)", planteur: "PLANTEUR (crop type)"};
+const PL_INPUT_LABEL = {"s2-monthly": "S2 monthly (raw bands)", "emb-aef": "AlphaEarth (AEF)", "emb-tessera-v1": "Tessera v1",
+  "emb-tessera-v1.1": "Tessera v1.1", "emb-tessera-v2": "Tessera v2", "emb-olmoearth-v1.3": "OlmoEarth v1.3 (128d)",
+  "galileo-base": "Galileo", "presto-base": "Presto"};
+const PL_HEAD_LABEL = {probe: "linear probe", lightgbm: "LightGBM", tabpfn: "TabPFN (few-shot)", tabicl: "TabICL (few-shot)", background: "all Background"};
+const PL_ISLANDS = [["reunion", "Réunion"], ["guadeloupe", "Guadeloupe"], ["martinique", "Martinique"], ["guyane", "Guyane"], ["mayotte", "Mayotte"]];
+// Paper reference numbers (protocols/planteur.md section 4): default = Table 2 test mIoU-8, loio = Table 6 per island + mean.
+const PL_PAPER = {
+  "*|background": {def: 10.07, loio: [9.33, 10.17, 10.18, 10.33, 12.42, 10.49]},
+  "emb-aef|probe": {def: 27.68, loio: [9.88, 23.08, 20.77, 12.75, 12.42, 15.78]},
+  "emb-tessera-v1|probe": {def: 33.13}, "emb-tessera-v1.1|probe": {def: 32.78},
+  "emb-tessera-v2|probe": {def: 34.20, loio: [11.50, 28.79, 29.57, 12.26, 12.43, 18.91]},
+  "emb-olmoearth-v1.3|probe": {def: 36.88, loio: [26.43, 31.16, 35.16, 15.50, 12.42, 24.13]},
+  "galileo-base|probe": {def: 34.71}, "presto-base|probe": {def: 16.25}};
+const plPaper = r => PL_PAPER[`${r.input}|${r.model}`] || (r.model === "background" ? PL_PAPER["*|background"] : null);
+let plSort = {key: "mean", dir: -1};
 const ES_MODEL_LABEL = {resnet50: "ResNet-50", "resnet50-imagenet": "ResNet-50 (ImageNet)", "resnet50-random": "ResNet-50 (random init)", galileo: "Galileo", "galileo-base": "Galileo base"};
 const ES_SETTING_LABEL = {frozen: "frozen encoder", full: "full fine-tuning"};
 const esLabel = r => `${ES_MODEL_LABEL[r.model] || r.model} · ${ES_SETTING_LABEL[r.setting] || r.setting}`;
@@ -216,7 +253,7 @@ function parseCSV(text) {
   const [head, ...lines] = text.trim().split(/\r?\n/);
   const cols = head.split(",");
   return lines.filter(Boolean).map(l => { const v = l.split(","); const o = {};
-    cols.forEach((c, i) => { const x = v[i]; o[c] = x !== "" && !isNaN(+x) && !["subset","scheme","input","model","dataset","git_commit","sweep","shift","task","test_set","setting","group"].includes(c) ? +x : x; });
+    cols.forEach((c, i) => { const x = v[i]; o[c] = x !== "" && !isNaN(+x) && !["subset","scheme","input","model","dataset","git_commit","sweep","shift","task","test_set","setting","group","split","fold","regime","params"].includes(c) ? +x : x; });
     return o; });
 }
 async function load() {
@@ -241,7 +278,8 @@ async function load() {
   });
   document.getElementById("meta").textContent =
     `${ROWS.length} result rows · updated ${index.updated} · sweeps: ${[...new Set(ROWS.map(r => r.sweep).filter(Boolean))].join(", ")}`;
-  fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))].sort((a, b) => (b === "yieldsat") - (a === "yieldsat")), d => DATASET_LABEL[d] || d);
+  const DS_ORDER = ["yieldsat", "planteur", "earthshift"];
+  fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))].sort((a, b) => DS_ORDER.indexOf(a) - DS_ORDER.indexOf(b)), d => DATASET_LABEL[d] || d);
   fill("f-testset", [...new Set(ROWS.filter(r => r.dataset === "earthshift").map(r => r.test_set))], t => t);
   document.getElementById("f-testset").addEventListener("change", render);
   // Transfer schemes first: leave one year out is the headline. Random 10-fold is kept as the paper-comparable
@@ -279,16 +317,18 @@ const fmt = (m, v) => v == null || isNaN(v) ? "–" : v.toFixed(m.endsWith("r2")
 
 function render() {
   const ds = val("f-dataset"), scheme = val("f-scheme"), metric = val("f-metric");
-  const es = ds === "earthshift";
+  const es = ds === "earthshift", pl = ds === "planteur", other = es || pl;
   const view = val("f-view");
   // The ranking view needs held-out groups: random folds have none, so switch to leave one year out.
-  if (!es && view === "rank" && scheme === "cv10") {
+  if (!other && view === "rank" && scheme === "cv10") {
     document.getElementById("f-scheme").value = "loyo"; defaultMetric(); return render();
   }
-  document.querySelectorAll(".ys").forEach(el => el.classList.toggle("hidden", Boolean(es || (el.dataset.view && el.dataset.view !== view))));
+  document.querySelectorAll(".ys").forEach(el => el.classList.toggle("hidden", Boolean(other || (el.dataset.view && el.dataset.view !== view))));
   document.querySelectorAll(".es").forEach(el => el.classList.toggle("hidden", !es));
+  document.querySelectorAll(".pl").forEach(el => el.classList.toggle("hidden", !pl));
   // Controls that do nothing in the current view are hidden (e.g. Head on the early-season view).
-  document.querySelectorAll("[data-for]").forEach(el => el.classList.toggle("hidden", Boolean(es || !el.dataset.for.split(" ").includes(view))));
+  document.querySelectorAll("[data-for]").forEach(el => el.classList.toggle("hidden", Boolean(other || !el.dataset.for.split(" ").includes(view))));
+  if (pl) return renderPlanteur(ROWS.filter(r => r.dataset === "planteur" && !String(r.input).includes("@")));
   if (es) return renderEarthShift(ROWS.filter(r => r.dataset === "earthshift" && r.test_set === val("f-testset")));
   if (!es && view === "early") return renderEarly(scheme, metric);
   if (!es && view === "labels") return renderLabels(scheme, metric);
@@ -563,6 +603,88 @@ function renderEarthShift(rows) {
     `<td>${r.lr}</td><td>${r.seeds}</td><td>${pm(r.id_miou_mean, r.id_miou_std)}</td><td>${pm(r.ood_miou_mean, r.ood_miou_std)}</td>` +
     `<td>${pm(r.delta_mean, r.delta_std)}</td><td>${pm(r.rho_mean, r.rho_std)}</td><td>${f1(r.id_boundary_iou_mean)}</td><td>${f1(r.ood_boundary_iou_mean)}</td></tr>`;
   t.innerHTML = h + "</tbody>";
+}
+// ---- PLANTEUR: one entry per input x head, holding the default test and the five islands + LOIO mean ----
+function plEntries(rows) {
+  const by = {};
+  for (const r of rows) {
+    const k = `${r.input}|${r.model}|${r.regime}`;
+    const e = by[k] || (by[k] = {input: r.input, model: r.model, regime: r.regime, def: null, islands: {}, mean: null});
+    if (r.split === "default") e.def = r; else if (r.fold === "mean") e.mean = r; else e.islands[r.fold] = r;
+  }
+  return Object.values(by);
+}
+const plInput = e => e.model === "background" ? "Trivial" : (PL_INPUT_LABEL[e.input] || e.input);
+const plLabel = e => `${plInput(e)} · ${PL_HEAD_LABEL[e.model] || e.model}`;
+const plTip = (e, r, what) => r ? `<b>${plLabel(e)}</b> · ${what}<br>mIoU-8 ${r.miou8.toFixed(2)} · OA ${r.oa.toFixed(2)}` +
+  (r.params ? `<br>chosen on val: ${r.params} (val mIoU-8 ${r.val_miou8.toFixed(2)})` : "") +
+  (r.train_pixels ? `<br>${(+r.train_pixels).toLocaleString()} training pixels (${r.regime})` : "") : "";
+function renderPlanteur(rows) {
+  const svg = document.getElementById("pl-chart"), t = document.getElementById("pl-table");
+  const f2 = v => v == null || isNaN(v) ? "–" : v.toFixed(2);
+  document.getElementById("pl-legend").innerHTML =
+    `<span><svg width="14" height="14">${marker("circle", 7, 7, 5, "var(--series-1)")}</svg>Default test (in-domain)</span>` +
+    `<span><svg width="14" height="14">${marker("square", 7, 7, 5, "var(--series-2)")}</svg>LOIO mean (unseen island)</span>` +
+    `<span><svg width="14" height="14">${marker("circle", 7, 7, 5, "var(--text-muted)", false, true)}</svg>Paper</span>`;
+  const entries = plEntries(rows);
+  if (!entries.length) {
+    svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">No PLANTEUR results published yet.</text>`;
+    t.innerHTML = ""; return;
+  }
+  // Chart: rows sorted by LOIO mean (then default test); rows with neither finished score are left out.
+  const score = e => e.mean ? e.mean.miou8 : (e.def ? e.def.miou8 - 100 : -1e9);
+  const ce = entries.filter(e => e.mean || e.def).sort((a, b) => score(b) - score(a));
+  const labels = ce.map(plLabel), L = labelWidth(labels);
+  const W = Math.max(svg.parentElement.clientWidth, 520), R = 24, T = 28, rowH = 30, H = T + ce.length * rowH + 8;
+  svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const vals = ce.flatMap(e => { const p = plPaper(e) || {};
+    return [e.def && e.def.miou8, e.mean && e.mean.miou8, p.def, p.loio && p.loio[5]]; }).filter(v => v != null);
+  const hi = Math.max(10, ...vals) * 1.06, lo = 0;
+  const x = v => L + (v - lo) / (hi - lo) * (W - L - R);
+  let g = "";
+  for (const tk of niceTicks(lo, hi, 6)) g += `<line x1="${x(tk)}" x2="${x(tk)}" y1="${T - 6}" y2="${H - 8}" stroke="var(--grid)"/>` +
+    `<text x="${x(tk)}" y="${T - 12}" text-anchor="middle">${tk}</text>`;
+  ce.forEach((e, k) => {
+    const y = T + k * rowH + rowH / 2, p = plPaper(e) || {};
+    const tip = [plTip(e, e.def, "default test"), plTip(e, e.mean, "LOIO mean")].filter(Boolean).join("<br><br>") +
+      (p.def != null ? `<br><br>Paper: default ${f2(p.def)}${p.loio ? ` · LOIO mean ${f2(p.loio[5])}` : ""}${p.fewshot ? " (few-shot, Table 7)" : ""}` : "");
+    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${labels[k]}</text>`;
+    g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">`;
+    if (e.def && e.mean) g += `<line x1="${x(e.mean.miou8)}" x2="${x(e.def.miou8)}" y1="${y}" y2="${y}" stroke="var(--text-muted)" stroke-width="2"/>`;
+    if (p.def != null) g += marker("circle", x(p.def), y, 4.5, "var(--series-1)", false, true);
+    if (p.loio) g += marker("square", x(p.loio[5]), y, 4.5, "var(--series-2)", false, true);
+    if (e.def) g += marker("circle", x(e.def.miou8), y, 5.5, "var(--series-1)", true);
+    if (e.mean) g += marker("square", x(e.mean.miou8), y, 5.5, "var(--series-2)", true);
+    g += `<rect x="${L}" y="${y - 12}" width="${W - L - R}" height="24" fill="transparent"/></g>`;
+  });
+  svg.innerHTML = g;
+  // Table
+  const cols = [["input", "Input"], ["model", "Head"], ...PL_ISLANDS, ["mean", "LOIO mean"], ["pmean", "Paper"], ["def", "Default test"], ["pdef", "Paper"]];
+  const v = (e, c) => c === "mean" ? (e.mean ? e.mean.miou8 : NaN) : c === "def" ? (e.def ? e.def.miou8 : NaN)
+    : c === "pmean" ? ((plPaper(e) || {}).loio || [])[5] : c === "pdef" ? (plPaper(e) || {}).def
+    : (e.islands[c] ? e.islands[c].miou8 : NaN);
+  const key = e => plSort.key === "input" ? plLabel(e) : plSort.key === "model" ? (PL_HEAD_LABEL[e.model] || e.model) : v(e, plSort.key);
+  const te = [...entries].sort((a, b) => { const p = key(a), q = key(b);
+    if (typeof p === "string") return p.localeCompare(q) * plSort.dir;
+    if (p == null || isNaN(p)) return 1; if (q == null || isNaN(q)) return -1; return (p - q) * plSort.dir; });
+  const arrow = c => plSort.key === c ? ` <span class="arrow">${plSort.dir === -1 ? "▾" : "▴"}</span>` : "";
+  const shade = val => { if (val == null || isNaN(val)) return ""; const step = Math.max(0, Math.min(6, Math.round((val - 10) / 30 * 6)));
+    return `background: var(--seq-${step}); color: ${step >= 4 ? "#fff" : "var(--text-primary)"};`; };
+  let h = `<thead><tr>${cols.map(([c, n], i) => `<th class="${i < 2 ? "l" : ""}" data-key="${c}">${n}${arrow(c)}</th>`).join("")}</tr></thead><tbody>`;
+  for (const e of te) {
+    h += `<tr><td class="l">${plInput(e)}</td><td class="l">${PL_HEAD_LABEL[e.model] || e.model}</td>`;
+    for (const [c, n] of cols.slice(2)) {
+      const r = c === "mean" ? e.mean : c === "def" ? e.def : e.islands[c];
+      const paper = c.startsWith("p");
+      const tip = paper ? "" : plTip(e, r, n);
+      const x0 = v(e, c), txt = c === "mean" || c === "def" ? `<b>${f2(x0)}</b>` : f2(x0);
+      h += `<td class="cell" style="${paper ? "color:var(--text-muted)" : shade(x0)}" data-tip="${tip.replace(/"/g, "&quot;")}">${txt}</td>`;
+    }
+    h += "</tr>";
+  }
+  t.innerHTML = h + "</tbody>";
+  t.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    const k = th.dataset.key; plSort = {key: k, dir: plSort.key === k ? -plSort.dir : (["input", "model"].includes(k) ? 1 : -1)}; render(); }));
 }
 function marker(shape, cx, cy, r, color, ring, hollow) {
   // hollow: outline in the series colour on the surface fill (a partial result)

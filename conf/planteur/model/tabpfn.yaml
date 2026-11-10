@@ -1,0 +1,16 @@
+# TabPFN-3.5 (fast) classifier, few-shot: the official X = 1000 pixels per class (splits/fewshot_pixels.json), labelled
+# few-shot and compared with paper Table 7 (3.6). No tuning. Inputs wider than max_features are reduced by PCA fitted
+# on the training pixels. GPU.
+name: tabpfn
+kind: sklearn
+regime: fewshot
+fewshot: 1000
+impute: false
+max_features: 500
+predict_batch: 100000
+estimator:
+  _target_: tabpfn.TabPFNClassifier
+  model_path: ${oc.env:AGRIBENCH_TABPFN_CKPT,/lustre/shared/agriscience-benchmark/checkpoints/tabpfn/tabpfn-v3.5-fast-20260909.safetensors}
+  device: cuda
+  ignore_pretraining_limits: true
+  random_state: ${experiment.seed}

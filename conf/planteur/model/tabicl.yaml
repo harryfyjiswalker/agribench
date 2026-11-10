@@ -1,0 +1,14 @@
+# TabICL v2 classifier, few-shot like TabPFN (X = 1000 per class). Inputs wider than max_features -> PCA. GPU.
+name: tabicl
+kind: sklearn
+regime: fewshot
+fewshot: 1000
+impute: false
+max_features: 100
+predict_batch: 100000
+estimator:
+  _target_: tabicl.TabICLClassifier
+  model_path: ${oc.env:AGRIBENCH_TABICL_CLS_CKPT,/lustre/shared/agriscience-benchmark/checkpoints/tabicl/tabicl-classifier-v2-20260212.ckpt}
+  allow_auto_download: false
+  device: cuda
+  random_state: ${experiment.seed}
