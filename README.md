@@ -108,6 +108,7 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 | `terramind` | [TerraMind](https://arxiv.org/abs/2504.11171) embedding of the peak-greenness scene plus elevation (DEM), sampled at the pixel | 768 |
 | `clay` | [Clay](https://github.com/Clay-foundation/model) v1.5 image embedding of the peak-greenness scene, sampled at the pixel | 1024 |
 | `satmae` | [SatMAE](https://arxiv.org/abs/2207.08051) multispectral image embedding of the peak-greenness scene, sampled at the pixel | 1024 |
+| `thor` | [THOR](https://arxiv.org/abs/2601.16011) image embedding of the peak-greenness scene, sampled at the pixel | 768 |
 
 A location encoder gives a pixel the same embedding every year, so on its own it can't follow year-to-year
 changes in yield. It is meant to be combined with an input that changes over time, such as `s2+mind`. How each
@@ -281,7 +282,7 @@ The datasets have their own licences.
 | `$project/features/yieldsat/` | YieldSAT inputs: `v1/` holds `s2` and `s2-adm`; every other input has its own folder (`mind/`, `galileo/`, `aef/`, …) |
 | `$project/runs/` | run outputs per dataset; sweeps under `runs/yieldsat/sweeps/<name>/`; test ledgers |
 | `$project/checkpoints/`, `$project/upstream/` | model weights, and pinned copies of the models' source code |
-| `$project/envs/` | shared Python environments: `benchmark-v2` (everything), `tessera` (adds geotessera) and `patchfm` (adds terratorch for TerraMind and Clay; `tools/setup_patchfm_env.sh`) |
+| `$project/envs/` | shared Python environments: `benchmark-v2` (everything), `tessera` (adds geotessera) and `patchfm` (adds terratorch for TerraMind, Clay and THOR; `tools/setup_patchfm_env.sh`) |
 | `$project/project.env` | optional Anunna project number for billing: one line `ANUNNA_PROJECT=<number>` |
 
 Every batch script first loads `tools/slurm_env.sh`. It limits library threads to the cores the job asked for
