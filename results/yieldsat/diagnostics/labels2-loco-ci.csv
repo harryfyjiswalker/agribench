@@ -67,6 +67,7 @@ corn,loco,olmoearth@f0.25-s2,lightgbm,-0.3631,-0.4825,-0.2609,3.1038,2.8981,3.30
 corn,loco,olmoearth@f0.25-s2,probe,-0.801,-1.0083,-0.6121,3.5677,3.3551,3.7822
 corn,loco,olmoearth@f0.50-s0,lightgbm,-0.6068,-0.7638,-0.4882,3.3699,3.1319,3.5857
 corn,loco,olmoearth@f0.50-s0,probe,-1.0882,-1.3424,-0.8846,3.8417,3.5958,4.0987
+corn,loco,olmoearth@f0.50-s1,lightgbm,-0.4705,-0.6161,-0.3597,3.2238,3.0045,3.438
 corn,loco,olmoearth@f0.50-s1,probe,-0.4149,-0.5531,-0.2861,3.1623,2.961,3.3765
 corn,loco,olmoearth@f0.50-s2,lightgbm,-0.5633,-0.7261,-0.4218,3.324,3.0628,3.5655
 corn,loco,olmoearth@f0.50-s2,probe,-1.2021,-1.4744,-0.9981,3.9451,3.6827,4.2006
@@ -82,6 +83,7 @@ corn,loco,s2-aligned@f0.10-s1,lightgbm,-0.703,-0.9443,-0.4721,3.4693,3.2251,3.69
 corn,loco,s2-aligned@f0.10-s1,probe,-0.8255,-1.0582,-0.613,3.592,3.3524,3.8249
 corn,loco,s2-aligned@f0.10-s2,lightgbm,-1.5532,-1.9187,-1.2596,4.248,3.9444,4.5629
 corn,loco,s2-aligned@f0.10-s2,probe,-3.5334,-4.3986,-2.8089,5.6604,5.253,6.0638
+corn,loco,s2-aligned@f0.25-s0,lightgbm,-0.5633,-0.7967,-0.3845,3.324,3.1015,3.5575
 corn,loco,s2-aligned@f0.25-s0,probe,-0.5505,-0.6937,-0.4276,3.3104,3.0847,3.5401
 corn,loco,s2-aligned@f0.25-s1,lightgbm,-0.4465,-0.6452,-0.2722,3.1975,2.9774,3.4073
 corn,loco,s2-aligned@f0.25-s1,probe,-0.6632,-0.8719,-0.4859,3.4285,3.168,3.6775
@@ -207,6 +209,7 @@ soybean,loco,s2-aligned@f0.25-s1,lightgbm,0.1988,0.1389,0.2553,1.1106,1.0725,1.1
 soybean,loco,s2-aligned@f0.25-s1,probe,0.0365,-0.0348,0.1061,1.2179,1.1764,1.2603
 soybean,loco,s2-aligned@f0.25-s2,lightgbm,0.3335,0.2808,0.3858,1.013,0.9698,1.055
 soybean,loco,s2-aligned@f0.25-s2,probe,0.0652,0.0239,0.1063,1.1997,1.1631,1.2405
+soybean,loco,s2-aligned@f0.50-s0,lightgbm,0.2181,0.1592,0.2774,1.0972,1.0564,1.1361
 soybean,loco,s2-aligned@f0.50-s0,probe,0.0957,-0.0499,0.2106,1.18,1.1009,1.2689
 soybean,loco,s2-aligned@f0.50-s1,lightgbm,0.1899,0.1265,0.2484,1.1168,1.0773,1.1565
 soybean,loco,s2-aligned@f0.50-s1,probe,0.0247,-0.0153,0.0612,1.2254,1.1849,1.2629

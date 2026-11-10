@@ -157,7 +157,7 @@ ARG-W,loro,s2-gdd,lightgbm,0.6257,0.5154,0.7168,1.3069,1.1159,1.492
 ARG-W,loro,s2-gdd,probe,0.6192,0.4894,0.7169,1.3184,1.1212,1.5095
 ARG-W,loro,s2-harmonic,lightgbm,0.6822,0.6007,0.7497,1.2043,1.0739,1.3287
 ARG-W,loro,s2-harmonic,probe,0.7096,0.6052,0.7816,1.1512,0.9872,1.3177
-ARG-W,loro,tessera,lightgbm,0.7167,0.6029,0.7982,1.1371,0.9654,1.3323
+ARG-W,loro,tessera,lightgbm,0.7167,0.6029,0.7982,1.1371,0.9653,1.3323
 ARG-W,loro,tessera,probe,0.5313,0.3954,0.6406,1.4625,1.2866,1.6241
 ARG-W,loyo,aef,lightgbm,0.6114,0.5256,0.6837,1.3318,1.1854,1.4742
 ARG-W,loyo,aef,probe,0.5698,0.4781,0.651,1.4011,1.2433,1.5567
@@ -409,7 +409,7 @@ GER-R,loyo,biophys,lightgbm,0.0849,-0.1665,0.2688,1.2842,1.1092,1.4631
 GER-R,loyo,biophys,probe,0.1498,-0.0546,0.3189,1.2378,1.0512,1.3978
 GER-R,loyo,galileo,lightgbm,-0.0577,-0.2521,0.0797,1.3806,1.241,1.5182
 GER-R,loyo,galileo,probe,-0.0883,-0.3314,0.1171,1.4004,1.2326,1.5578
-GER-R,loyo,galileo+mind,lightgbm,0.1688,-0.0563,0.3327,1.2239,1.0774,1.3622
+GER-R,loyo,galileo+mind,lightgbm,0.1688,-0.0563,0.3327,1.2239,1.0775,1.3622
 GER-R,loyo,galileo+mind,probe,0.0675,-0.2044,0.2596,1.2963,1.1467,1.4462
 GER-R,loyo,s2-aligned,lightgbm,0.0952,-0.0997,0.2523,1.2769,1.1039,1.4347
 GER-R,loyo,s2-aligned,probe,0.0023,-0.2217,0.1716,1.3409,1.1672,1.5055
@@ -509,6 +509,7 @@ URG-S,loro,biophys,lightgbm,0.5315,0.4503,0.6008,0.7321,0.6632,0.8041
 URG-S,loro,biophys,probe,0.5649,0.4878,0.63,0.7055,0.6417,0.7736
 URG-S,loro,galileo,lightgbm,0.5567,0.4809,0.6278,0.7121,0.6475,0.7792
 URG-S,loro,galileo,probe,0.5818,0.5012,0.6554,0.6916,0.6189,0.7632
+URG-S,loro,galileo+mind,lightgbm,0.3732,0.3141,0.4256,0.8467,0.8028,0.892
 URG-S,loro,galileo+mind,probe,0.3573,0.2933,0.4179,0.8574,0.8059,0.9096
 URG-S,loro,s2-aligned,lightgbm,0.555,0.4798,0.627,0.7134,0.6445,0.7799
 URG-S,loro,s2-aligned,probe,0.5483,0.4796,0.6143,0.7188,0.6571,0.7875

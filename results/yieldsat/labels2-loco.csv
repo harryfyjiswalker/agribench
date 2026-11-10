@@ -57,6 +57,7 @@ yieldsat,corn,loco,olmoearth,lightgbm,2,768,256,,0.25,0,-0.4944,0.0238,4.0417,0.
 yieldsat,corn,loco,olmoearth,lightgbm,2,768,256,,0.25,1,-0.2292,0.0406,3.6539,0.4037,-0.5143,0.056,2.8028,0.586,-0.1274,3.752,-0.2629,2.9876,0.086,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,olmoearth,lightgbm,2,768,256,,0.25,2,-0.2905,0.1196,3.7262,0.3012,-0.8557,0.4321,3.0121,0.3363,-0.1535,3.7953,-0.3631,3.1038,0.075,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,olmoearth,lightgbm,2,768,256,,0.5,0,-0.3771,0.0168,3.879,0.515,-1.0084,0.2087,3.1995,0.5653,-0.2874,4.0095,-0.6068,3.3699,0.085,0bfa9c4df6,labels2-loco
+yieldsat,corn,loco,olmoearth,lightgbm,2,768,256,,0.5,1,-0.3753,0.1025,3.8525,0.3464,-0.9912,0.448,3.1245,0.3616,-0.239,3.9334,-0.4705,3.2238,1.151,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,olmoearth,lightgbm,2,768,256,,0.5,2,-0.349,0.0314,3.8417,0.531,-0.9546,0.2039,3.1561,0.557,-0.2669,3.9775,-0.5633,3.324,0.095,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,olmoearth,probe,2,768,256,,0.05,0,0.0572,0.0268,3.2011,0.361,-0.1237,0.1012,2.3978,0.4399,0.1336,3.2893,0.0931,2.5317,0.01,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,olmoearth,probe,2,768,256,,0.05,1,-0.1199,0.0922,3.4741,0.2988,-0.5121,0.2399,2.7535,0.4119,-0.0055,3.5434,-0.1677,2.8728,0.01,0bfa9c4df6,labels2-loco
@@ -76,6 +77,7 @@ yieldsat,corn,loco,s2-aligned,lightgbm,2,204,256,,0.05,2,-0.1409,0.0098,3.5299,0
 yieldsat,corn,loco,s2-aligned,lightgbm,2,204,256,,0.1,0,-0.7847,0.2328,4.4398,0.8467,-1.7397,0.188,3.8138,0.9879,-0.7511,4.6761,-1.4319,4.1458,0.015,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,s2-aligned,lightgbm,2,204,256,,0.1,1,-0.3859,0.1491,3.9093,0.7017,-0.9089,0.1479,3.1861,0.8385,-0.3473,4.1017,-0.703,3.4693,0.192,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,s2-aligned,lightgbm,2,204,256,,0.1,2,-0.7186,0.6989,4.3496,1.4371,-1.3001,1.1651,3.5543,1.6696,-0.8718,4.8346,-1.5532,4.248,0.023,0bfa9c4df6,labels2-loco
+yieldsat,corn,loco,s2-aligned,lightgbm,2,204,256,,0.25,0,-0.2441,0.1296,3.7035,0.6586,-0.714,0.2001,3.0296,0.853,-0.2078,3.8836,-0.5633,3.324,1.097,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,s2-aligned,lightgbm,2,204,256,,0.25,1,-0.2111,0.1245,3.6539,0.6473,-0.5637,0.2225,2.8997,0.851,-0.1751,3.8307,-0.4465,3.1975,0.021,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,s2-aligned,lightgbm,2,204,256,,0.25,2,-0.3067,0.0408,3.7827,0.5376,-0.8395,0.0623,3.0903,0.6507,-0.2313,3.9212,-0.537,3.2959,0.02,0bfa9c4df6,labels2-loco
 yieldsat,corn,loco,s2-aligned,lightgbm,2,204,256,,0.5,0,-0.1481,0.1555,3.5614,0.6879,-0.489,0.2095,2.8292,0.8281,-0.1286,3.7541,-0.3762,3.1187,0.022,0bfa9c4df6,labels2-loco
@@ -175,6 +177,7 @@ yieldsat,corn>Argentina,loco,olmoearth,lightgbm,1,768,256,,0.25,0,-0.5182,0.0,4.
 yieldsat,corn>Argentina,loco,olmoearth,lightgbm,1,768,256,,0.25,1,-0.1886,0.0,4.0576,0.0,-0.4583,0.0,3.3889,0.0,-0.1886,4.0576,-0.4583,3.3889,0.043,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,olmoearth,lightgbm,1,768,256,,0.25,2,-0.1709,0.0,4.0273,0.0,-0.4237,0.0,3.3484,0.0,-0.1709,4.0273,-0.4237,3.3484,0.037,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,olmoearth,lightgbm,1,768,256,,0.5,0,-0.3939,0.0,4.394,0.0,-0.7998,0.0,3.7648,0.0,-0.3939,4.394,-0.7998,3.7648,0.039,0bfa9c4df6,labels2-loco
+yieldsat,corn>Argentina,loco,olmoearth,lightgbm,1,768,256,,0.5,1,-0.2728,0.0,4.1988,0.0,-0.5431,0.0,3.486,0.0,-0.2728,4.1988,-0.5431,3.486,0.044,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,olmoearth,lightgbm,1,768,256,,0.5,2,-0.3804,0.0,4.3727,0.0,-0.7507,0.0,3.7131,0.0,-0.3804,4.3727,-0.7507,3.7131,0.053,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,olmoearth,probe,1,768,256,,0.05,0,0.0839,0.0,3.5621,0.0,-0.0225,0.0,2.8377,0.0,0.0839,3.5621,-0.0225,2.8377,0.006,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,olmoearth,probe,1,768,256,,0.05,1,-0.0277,0.0,3.7729,0.0,-0.2723,0.0,3.1653,0.0,-0.0277,3.7729,-0.2723,3.1653,0.006,0bfa9c4df6,labels2-loco
@@ -194,6 +197,7 @@ yieldsat,corn>Argentina,loco,s2-aligned,lightgbm,1,204,256,,0.05,2,-0.1507,0.0,3
 yieldsat,corn>Argentina,loco,s2-aligned,lightgbm,1,204,256,,0.1,0,-1.0176,0.0,5.2865,0.0,-1.9277,0.0,4.8017,0.0,-1.0176,5.2865,-1.9277,4.8017,0.006,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,s2-aligned,lightgbm,1,204,256,,0.1,1,-0.535,0.0,4.6111,0.0,-1.0568,0.0,4.0246,0.0,-0.535,4.6111,-1.0568,4.0246,0.177,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,s2-aligned,lightgbm,1,204,256,,0.1,2,-1.4174,0.0,5.7867,0.0,-2.4652,0.0,5.2239,0.0,-1.4174,5.7867,-2.4652,5.2239,0.012,0bfa9c4df6,labels2-loco
+yieldsat,corn>Argentina,loco,s2-aligned,lightgbm,1,204,256,,0.25,0,-0.3737,0.0,4.3621,0.0,-0.9141,0.0,3.8826,0.0,-0.3737,4.3621,-0.9141,3.8826,0.018,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,s2-aligned,lightgbm,1,204,256,,0.25,1,-0.3356,0.0,4.3012,0.0,-0.7863,0.0,3.7507,0.0,-0.3356,4.3012,-0.7863,3.7507,0.012,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,s2-aligned,lightgbm,1,204,256,,0.25,2,-0.3475,0.0,4.3203,0.0,-0.7771,0.0,3.741,0.0,-0.3475,4.3203,-0.7771,3.741,0.011,0bfa9c4df6,labels2-loco
 yieldsat,corn>Argentina,loco,s2-aligned,lightgbm,1,204,256,,0.5,0,-0.3036,0.0,4.2493,0.0,-0.6985,0.0,3.6573,0.0,-0.3036,4.2493,-0.6985,3.6573,0.011,0bfa9c4df6,labels2-loco
@@ -293,6 +297,7 @@ yieldsat,corn>Brazil,loco,olmoearth,lightgbm,1,768,256,,0.25,0,-0.4706,0.0,3.497
 yieldsat,corn>Brazil,loco,olmoearth,lightgbm,1,768,256,,0.25,1,-0.2699,0.0,3.2502,0.0,-0.5703,0.0,2.2168,0.0,-0.2699,3.2502,-0.5703,2.2168,0.043,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,olmoearth,lightgbm,1,768,256,,0.25,2,-0.4101,0.0,3.425,0.0,-1.2878,0.0,2.6758,0.0,-0.4101,3.425,-1.2878,2.6758,0.038,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,olmoearth,lightgbm,1,768,256,,0.5,0,-0.3604,0.0,3.364,0.0,-1.2171,0.0,2.6341,0.0,-0.3604,3.364,-1.2171,2.6341,0.046,0bfa9c4df6,labels2-loco
+yieldsat,corn>Brazil,loco,olmoearth,lightgbm,1,768,256,,0.5,1,-0.4777,0.0,3.5061,0.0,-1.4392,0.0,2.7629,0.0,-0.4777,3.5061,-1.4392,2.7629,1.107,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,olmoearth,lightgbm,1,768,256,,0.5,2,-0.3176,0.0,3.3106,0.0,-1.1586,0.0,2.5991,0.0,-0.3176,3.3106,-1.1586,2.5991,0.042,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,olmoearth,probe,1,768,256,,0.05,0,0.0304,0.0,2.8401,0.0,-0.2249,0.0,1.9579,0.0,0.0304,2.8401,-0.2249,1.9579,0.004,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,olmoearth,probe,1,768,256,,0.05,1,-0.212,0.0,3.1753,0.0,-0.752,0.0,2.3416,0.0,-0.212,3.1753,-0.752,2.3416,0.004,0bfa9c4df6,labels2-loco
@@ -312,6 +317,7 @@ yieldsat,corn>Brazil,loco,s2-aligned,lightgbm,1,204,256,,0.05,2,-0.1311,0.0,3.06
 yieldsat,corn>Brazil,loco,s2-aligned,lightgbm,1,204,256,,0.1,0,-0.5519,0.0,3.593,0.0,-1.5517,0.0,2.8259,0.0,-0.5519,3.593,-1.5517,2.8259,0.009,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,s2-aligned,lightgbm,1,204,256,,0.1,1,-0.2368,0.0,3.2076,0.0,-0.7611,0.0,2.3476,0.0,-0.2368,3.2076,-0.7611,2.3476,0.015,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,s2-aligned,lightgbm,1,204,256,,0.1,2,-0.0197,0.0,2.9125,0.0,-0.135,0.0,1.8847,0.0,-0.0197,2.9125,-0.135,1.8847,0.011,0bfa9c4df6,labels2-loco
+yieldsat,corn>Brazil,loco,s2-aligned,lightgbm,1,204,256,,0.25,0,-0.1146,0.0,3.045,0.0,-0.5139,0.0,2.1766,0.0,-0.1146,3.045,-0.5139,2.1766,1.079,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,s2-aligned,lightgbm,1,204,256,,0.25,1,-0.0866,0.0,3.0066,0.0,-0.3412,0.0,2.0488,0.0,-0.0866,3.0066,-0.3412,2.0488,0.009,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,s2-aligned,lightgbm,1,204,256,,0.25,2,-0.2659,0.0,3.2451,0.0,-0.9018,0.0,2.4396,0.0,-0.2659,3.2451,-0.9018,2.4396,0.01,0bfa9c4df6,labels2-loco
 yieldsat,corn>Brazil,loco,s2-aligned,lightgbm,1,204,256,,0.5,0,0.0074,0.0,2.8736,0.0,-0.2796,0.0,2.0011,0.0,0.0074,2.8736,-0.2796,2.0011,0.011,0bfa9c4df6,labels2-loco
@@ -434,6 +440,7 @@ yieldsat,soybean,loco,s2-aligned,lightgbm,3,180,256,,0.1,2,-0.2944,0.4097,1.5858
 yieldsat,soybean,loco,s2-aligned,lightgbm,3,180,256,,0.25,0,-0.0943,0.223,1.4777,0.0682,-0.2995,0.4701,1.0686,0.0722,0.1182,1.473,0.2359,1.0846,0.034,0bfa9c4df6,labels2-loco
 yieldsat,soybean,loco,s2-aligned,lightgbm,3,180,256,,0.25,1,-0.1283,0.3302,1.4863,0.1153,-0.4748,0.7387,1.1011,0.0538,0.1187,1.4725,0.1988,1.1106,0.03,0bfa9c4df6,labels2-loco
 yieldsat,soybean,loco,s2-aligned,lightgbm,3,180,256,,0.25,2,-0.0631,0.3466,1.4354,0.0611,-0.3055,0.7486,1.0242,0.0592,0.172,1.4273,0.3335,1.013,0.15,0bfa9c4df6,labels2-loco
+yieldsat,soybean,loco,s2-aligned,lightgbm,3,180,256,,0.5,0,-0.0801,0.2546,1.4641,0.1031,-0.3107,0.4575,1.0744,0.0807,0.1407,1.454,0.2181,1.0972,0.999,0bfa9c4df6,labels2-loco
 yieldsat,soybean,loco,s2-aligned,lightgbm,3,180,256,,0.5,1,-0.1079,0.2387,1.485,0.0674,-0.392,0.5246,1.1031,0.0696,0.1105,1.4793,0.1899,1.1168,0.043,0bfa9c4df6,labels2-loco
 yieldsat,soybean,loco,s2-aligned,lightgbm,3,180,256,,0.5,2,-0.0643,0.2119,1.458,0.0692,-0.221,0.3868,1.0453,0.0946,0.1412,1.4536,0.2637,1.0647,0.04,0bfa9c4df6,labels2-loco
 yieldsat,soybean,loco,s2-aligned,probe,3,180,256,,0.05,0,-0.8119,0.8683,1.8313,0.1981,-2.2912,2.5471,1.5242,0.2129,-0.3455,1.8195,-0.451,1.4946,0.01,0bfa9c4df6,labels2-loco
@@ -553,6 +560,7 @@ yieldsat,soybean>Argentina,loco,s2-aligned,lightgbm,1,180,256,,0.1,2,0.0358,0.0,
 yieldsat,soybean>Argentina,loco,s2-aligned,lightgbm,1,180,256,,0.25,0,0.1166,0.0,1.4354,0.0,0.1126,0.0,1.1387,0.0,0.1166,1.4354,0.1126,1.1387,0.012,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Argentina,loco,s2-aligned,lightgbm,1,180,256,,0.25,1,0.2334,0.0,1.3372,0.0,0.2598,0.0,1.04,0.0,0.2334,1.3372,0.2598,1.04,0.01,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Argentina,loco,s2-aligned,lightgbm,1,180,256,,0.25,2,0.2162,0.0,1.3522,0.0,0.221,0.0,1.0669,0.0,0.2162,1.3522,0.221,1.0669,0.096,0bfa9c4df6,labels2-loco
+yieldsat,soybean>Argentina,loco,s2-aligned,lightgbm,1,180,256,,0.5,0,0.2072,0.0,1.3599,0.0,0.1577,0.0,1.1093,0.0,0.2072,1.3599,0.1577,1.1093,0.97,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Argentina,loco,s2-aligned,lightgbm,1,180,256,,0.5,1,0.1189,0.0,1.4336,0.0,0.0483,0.0,1.1792,0.0,0.1189,1.4336,0.0483,1.1792,0.015,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Argentina,loco,s2-aligned,lightgbm,1,180,256,,0.5,2,0.1374,0.0,1.4185,0.0,0.0951,0.0,1.1498,0.0,0.1374,1.4185,0.0951,1.1498,0.015,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Argentina,loco,s2-aligned,probe,1,180,256,,0.05,0,-0.1205,0.0,1.6166,0.0,-0.1851,0.0,1.3159,0.0,-0.1205,1.6166,-0.1851,1.3159,0.004,0bfa9c4df6,labels2-loco
@@ -672,6 +680,7 @@ yieldsat,soybean>Brazil,loco,s2-aligned,lightgbm,1,180,256,,0.1,2,-0.8717,0.0,1.
 yieldsat,soybean>Brazil,loco,s2-aligned,lightgbm,1,180,256,,0.25,0,-0.4028,0.0,1.4236,0.0,-0.9574,0.0,0.9693,0.0,-0.4028,1.4236,-0.9574,0.9693,0.01,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Brazil,loco,s2-aligned,lightgbm,1,180,256,,0.25,1,-0.565,0.0,1.5037,0.0,-1.4855,0.0,1.0923,0.0,-0.565,1.5037,-1.4855,1.0923,0.01,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Brazil,loco,s2-aligned,lightgbm,1,180,256,,0.25,2,-0.5516,0.0,1.4972,0.0,-1.3642,0.0,1.0653,0.0,-0.5516,1.4972,-1.3642,1.0653,0.045,0bfa9c4df6,labels2-loco
+yieldsat,soybean>Brazil,loco,s2-aligned,lightgbm,1,180,256,,0.5,0,-0.4116,0.0,1.4281,0.0,-0.9314,0.0,0.9629,0.0,-0.4116,1.4281,-0.9314,0.9629,0.015,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Brazil,loco,s2-aligned,lightgbm,1,180,256,,0.5,1,-0.4379,0.0,1.4413,0.0,-1.1293,0.0,1.011,0.0,-0.4379,1.4413,-1.1293,1.011,0.016,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Brazil,loco,s2-aligned,lightgbm,1,180,256,,0.5,2,-0.3571,0.0,1.4002,0.0,-0.7657,0.0,0.9206,0.0,-0.3571,1.4002,-0.7657,0.9206,0.013,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Brazil,loco,s2-aligned,probe,1,180,256,,0.05,0,-2.0364,0.0,2.0945,0.0,-5.8749,0.0,1.8166,0.0,-2.0364,2.0945,-5.8749,1.8166,0.004,0bfa9c4df6,labels2-loco
@@ -791,6 +800,7 @@ yieldsat,soybean>Uruguay,loco,s2-aligned,lightgbm,1,180,256,,0.1,2,-0.0472,0.0,1
 yieldsat,soybean>Uruguay,loco,s2-aligned,lightgbm,1,180,256,,0.25,0,0.0033,0.0,1.5739,0.0,-0.0538,0.0,1.0979,0.0,0.0033,1.5739,-0.0538,1.0979,0.011,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Uruguay,loco,s2-aligned,lightgbm,1,180,256,,0.25,1,-0.0533,0.0,1.618,0.0,-0.1987,0.0,1.1709,0.0,-0.0533,1.618,-0.1987,1.1709,0.01,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Uruguay,loco,s2-aligned,lightgbm,1,180,256,,0.25,2,0.1463,0.0,1.4567,0.0,0.2268,0.0,0.9404,0.0,0.1463,1.4567,0.2268,0.9404,0.009,0bfa9c4df6,labels2-loco
+yieldsat,soybean>Uruguay,loco,s2-aligned,lightgbm,1,180,256,,0.5,0,-0.0357,0.0,1.6045,0.0,-0.1584,0.0,1.151,0.0,-0.0357,1.6045,-0.1584,1.151,0.014,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Uruguay,loco,s2-aligned,lightgbm,1,180,256,,0.5,1,-0.0046,0.0,1.5802,0.0,-0.0949,0.0,1.1191,0.0,-0.0046,1.5802,-0.0949,1.1191,0.012,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Uruguay,loco,s2-aligned,lightgbm,1,180,256,,0.5,2,0.0269,0.0,1.5552,0.0,0.0076,0.0,1.0654,0.0,0.0269,1.5552,0.0076,1.0654,0.012,0bfa9c4df6,labels2-loco
 yieldsat,soybean>Uruguay,loco,s2-aligned,probe,1,180,256,,0.05,0,-0.2788,0.0,1.7829,0.0,-0.8134,0.0,1.4402,0.0,-0.2788,1.7829,-0.8134,1.4402,0.003,0bfa9c4df6,labels2-loco
