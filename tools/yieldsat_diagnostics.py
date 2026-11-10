@@ -15,10 +15,15 @@ Field level throughout (pixel predictions averaged per field, the reported unit)
 3. Rank persistence: within each (subset, scheme), every (input, model) is ranked by within-group R^2 for each
    held-out group; mean rank and rank variance across groups say whether a winner wins consistently.
 
+Each run's rows are cached next to its predictions (diagnostics.json, cluster only) and recomputed only when the run's
+predictions or metrics are newer, so a pass over every sweep takes minutes and every publish can include every
+finished run. The bootstrap stream is seeded per run (from --seed and the run's path), so cached and fresh rows agree.
+
 Outputs aggregates only (the repo is public): results/yieldsat/diagnostics/<sweep>-{ci,decomp,ranks}.csv. Held-out
 years and countries are named; held-out regions are reported by fold number only.
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -72,6 +77,38 @@ def bootstrap(t, reps, rng):
             "field_rmse_hi": np.percentile(rmse, 97.5)}
 
 
+CACHE_VERSION = 1
+
+
+def run_rows(run, key, fields, reps, seed):
+    """(ci row, decomposition rows) for one run, from its cache when that is newer than the run's outputs."""
+    cache = run / "diagnostics.json"
+    newest = max((run / f).stat().st_mtime for f in ("metrics.json", "predictions.npz"))
+    if cache.exists() and cache.stat().st_mtime >= newest:
+        c = json.loads(cache.read_text())
+        if c.get("version") == CACHE_VERSION and c.get("reps") == reps and c.get("seed") == seed:
+            return {**key, **c["ci"]}, [{**key, **d} for d in c["dec"]]
+    rng = np.random.default_rng([seed, int(hashlib.sha256(str(run).encode()).hexdigest()[:8], 16)])
+    t = field_table(run)
+    ci = bootstrap(t, reps, rng)
+    dec = []
+    if key["scheme"] in GROUP:
+        attr = GROUP[key["scheme"]]
+        t["group"] = fields.loc[t.field_name, attr].to_numpy()
+        for g, sub in t.groupby("group"):
+            label = str(g) if attr != "region" else f"fold {int(sub.fold.iloc[0])}"
+            dec.append({"group": label, **decompose(sub.y, sub.p)})
+        dec.append({"group": "pooled", **decompose(t.y, t.p)})
+    as_float = lambda d: {k: (None if v is None else float(v) if isinstance(v, (float, np.floating)) else
+                              int(v) if isinstance(v, (int, np.integer)) else v) for k, v in d.items()}
+    try:
+        cache.write_text(json.dumps({"version": CACHE_VERSION, "reps": reps, "seed": seed, "ci": as_float(ci),
+                                     "dec": [as_float(d) for d in dec]}))
+    except OSError:
+        pass  # read-only run directory: recompute next time
+    return {**key, **ci}, [{**key, **d} for d in dec]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sweep", action="append", required=True)
@@ -83,7 +120,6 @@ def main():
     fields = pd.read_csv(ys.SPLITS / "fields.csv").set_index("field_shared_name")
     args.out.mkdir(parents=True, exist_ok=True)
     for sweep in args.sweep:
-        rng = np.random.default_rng(args.seed)
         root = ys.PROJECT / "runs" / "yieldsat" / "sweeps" / sweep
         ci, dec = [], []
         for run in run_dirs(root):
@@ -94,16 +130,9 @@ def main():
                 continue
             # the input directory name carries any variant suffix (s2-aligned@d060, s2-aligned@f0.10-s1)
             key = {"subset": m["label"], "scheme": m["scheme"], "input": run.parent.name, "model": m["model"]}
-            t = field_table(run)
-            ci.append({**key, **bootstrap(t, args.reps, rng)})
-            if m["scheme"] not in GROUP:
-                continue
-            attr = GROUP[m["scheme"]]
-            t["group"] = fields.loc[t.field_name, attr].to_numpy()
-            for g, sub in t.groupby("group"):
-                label = str(g) if attr != "region" else f"fold {int(sub.fold.iloc[0])}"
-                dec.append({**key, "group": label, **decompose(sub.y, sub.p)})
-            dec.append({**key, "group": "pooled", **decompose(t.y, t.p)})
+            c, d = run_rows(run, key, fields, args.reps, args.seed)
+            ci.append(c)
+            dec += d
         if not ci:
             print(f"{sweep}: no complete runs")
             continue

@@ -6,7 +6,7 @@
 #
 # 1. On Anunna: runs tools.collect_yieldsat for every YieldSAT sweep (complete runs only; one small CPU job each)
 #    and tools.earthshift_results --csv for EarthShift (final runs so far, with their seed counts). YieldSAT
-#    diagnostics (tools.yieldsat_diagnostics) run as a separate job; each publish ships the last finished output.
+#    diagnostics (tools.yieldsat_diagnostics) for every finished run, cached per run so only new runs are computed.
 # 2. Copies the aggregate CSVs into results/, rebuilds results/index.json, and opens a PR if anything changed.
 # Only aggregates are published (the repo is public): no field, tile or fold-level data.
 set -euo pipefail
@@ -42,16 +42,16 @@ if [ -f tools/earthshift_results.py ]; then es=$checkout; else
   git -C "$es" checkout -q --detach "$(git rev-parse FETCH_HEAD)"
 fi
 (cd "$es" && "$py" -m tools.earthshift_results --csv "$HOME/agribench-publish/earthshift/final.csv" >/dev/null) || echo "EarthShift export failed"
-# Diagnostics (bootstrap CIs, error decomposition, rank persistence; protocols/yieldsat.md 2.10) take a while, so
-# they run as their own job: publish the output of the last finished one and start a new one if none is queued.
+# Diagnostics (bootstrap CIs, error decomposition, rank persistence; protocols/yieldsat.md 2.10) for every finished
+# run of every sweep, so every new result gets its decomposition in the same publish. Rows are cached per run, so
+# only runs new since the last pass are computed. One job at a time (singleton): a pass already running is waited for.
 diag=$HOME/agribench-diagnostics
 mkdir -p "$diag" "$HOME/agribench-publish/yieldsat/diagnostics"
+args=(); for d in "$project"/runs/yieldsat/sweeps/*/; do s=$(basename "$d"); [[ $s == _* ]] || args+=(--sweep "$s"); done
+sbatch --wait --dependency=singleton --job-name=ys-diagnostics --time=02:00:00 --mem=16G --cpus-per-task=2 \
+  --output="$diag/diagnostics-%j.log" prepare.sbatch tools.yieldsat_diagnostics "${args[@]}" --out "$diag" >/dev/null \
+  || echo "Diagnostics job failed; publishing the last finished output"
 cp "$diag"/*.csv "$HOME/agribench-publish/yieldsat/diagnostics/" 2>/dev/null || true
-if ! squeue --me -h -o %j | grep -q ys-diagnostics; then
-  args=(); for d in "$project"/runs/yieldsat/sweeps/*/; do s=$(basename "$d"); [[ $s == _* ]] || args+=(--sweep "$s"); done
-  sbatch --parsable --job-name=ys-diagnostics --time=02:00:00 --mem=16G --cpus-per-task=2 \
-    --output="$diag/diagnostics-%j.log" prepare.sbatch tools.yieldsat_diagnostics "${args[@]}" --out "$diag" >/dev/null
-fi
 ls -l "$HOME"/agribench-publish/*/
 REMOTE
 
