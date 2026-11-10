@@ -16,10 +16,13 @@ Tasks run from a frozen copy of the checkout's HEAD (runs/planteur/sweeps/<name>
 tools/sweep_yieldsat.py); the checkout must be clean. GPU arrays run with --nice (low priority).
 """
 import argparse
+import json
 import os
 import shlex
 import subprocess
 from pathlib import Path
+
+import numpy as np
 
 from tools import planteur as pl
 from tools.sweep_yieldsat import frozen_code, submit
@@ -36,6 +39,20 @@ RESOURCES = {
     "tabpfn":     {"gpu": True,  "cpus": 8, "mem": "48G", "time": "08:00:00"},
     "tabicl":     {"gpu": True,  "cpus": 8, "mem": "48G", "time": "08:00:00"},
 }
+
+
+def resources(model, spec):
+    """The head's class; the CPU probe's memory follows the input width (its float16 table holds every training
+    pixel: up to ~36 M rows on a LOIO fold). Returns None when the probe table can't fit on one node."""
+    res = dict(RESOURCES[model])
+    if model == "probe":
+        info = pl.FEATURES / spec / "info.json"
+        d = len(json.loads(info.read_text())["feature_names"]) if info.exists() else 128
+        gb = 32 + int(np.ceil(1.15 * 36e6 * d * 2 / 1e9))
+        if gb > 200:
+            return None
+        res["mem"] = f"{max(96, 16 * int(np.ceil(gb / 16)))}G"
+    return res
 
 
 def variants(args):
@@ -99,12 +116,17 @@ def main():
         print("Nothing to run: every requested result exists.")
     groups = {}
     for model, overrides in tasks:
-        groups.setdefault(model, []).append(overrides)
+        spec = next(o.split("=", 1)[1] for o in overrides if o.startswith("input="))
+        res = resources(model, spec)
+        if res is None:
+            print(f"# skipped: {model} on {spec} (the probe table would not fit on one node)")
+            continue
+        groups.setdefault((model, res["mem"]), []).append(overrides)
     per_array = max(1, args.max_running // max(1, len(groups)))
     jobs = []
-    for model, items in sorted(groups.items()):
-        res = RESOURCES[model]
-        tfile = task_dir / f"{model}-{os.getpid()}.txt"
+    for (model, mem), items in sorted(groups.items()):
+        res = {**RESOURCES[model], "mem": mem}
+        tfile = task_dir / f"{model}-{mem}-{os.getpid()}.txt"
         if not args.dry_run:
             tfile.write_text("".join(" ".join(shlex.quote(o) for o in ov) + "\n" for ov in items))
         cmd = [f"{SLURM}/sbatch", "--parsable", f"--job-name=pl-{args.name}-{model}",

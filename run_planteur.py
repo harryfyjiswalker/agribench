@@ -6,7 +6,8 @@
     sbatch planteur.sbatch split=default input=s2-monthly model=probe experiment.months=4          # early season
     add experiment.smoke=true for a quick plumbing check (scores are meaningless)
 
-Inputs are the per-pixel tables of features/planteur/ (tools/build_planteur_features.py). For one fold:
+Inputs are the per-pixel tables of features/planteur/ (tools/build_planteur_features.py) or the per-patch token grids
+and AgriBench-built tables of tools/planteur_embed.py. For one fold:
   1. choose the training pixels by the head's regime (3.6): every pixel (probe), at most 256 per patch (LightGBM), or
      the few-shot set (TabPFN, TabICL; experiment.fewshot for any head). Pixels the input has no value for are left
      out of training (D7). Every statistic is fitted on these training pixels only (D3);
@@ -47,8 +48,14 @@ class Features:
         self.info = json.loads((d / "info.json").read_text())
         if self.info["meta_sha256"] != meta.sha256:
             raise ValueError(f"{d} was built for different meta.npz rows")
-        self.x = np.load(d / "X.npy", mmap_mode="r")
-        self.valid = np.load(d / "valid.npy")
+        self.kind = self.info["kind"]
+        if self.kind == "grid":  # per-patch token grids (tools/planteur_embed.py), sampled per pixel in take()
+            self.grid = np.load(d / "grid.npy")
+            self.meta = meta
+            self.valid = np.repeat(np.load(d / "patch_valid.npy"), np.diff(meta.offsets))
+        else:
+            self.x = np.load(d / "X.npy", mmap_mode="r")
+            self.valid = np.load(d / "valid.npy")
         names = self.info["feature_names"]
         self.columns = None
         if months is not None:
@@ -69,6 +76,8 @@ class Features:
         out = np.empty((len(rows), len(self.names)), np.float32)
         if len(rows) == 0:
             return out
+        if self.kind == "grid":
+            return self._take_grid(rows, out)
         breaks = np.flatnonzero(np.diff(rows) != 1) + 1
         starts = np.r_[0, breaks]
         stops = np.r_[breaks, len(rows)]
@@ -84,6 +93,39 @@ class Features:
             raw = out == self.nodata
             out[raw] = np.nan
         return out
+
+    def _take_grid(self, rows, out, chunk=1 << 18):
+        """Bilinear sample of each row's patch grid at the pixel centre, border-clamped: the rule of
+        tools.yieldsat_patches.sample_tokens (grid_sample, align_corners=False, padding 'border')."""
+        g, o, span = self.info["grid"], self.info["origin"], self.info["span"]
+        for a in range(0, len(rows), chunk):
+            r = rows[a:a + chunk]
+            k = np.searchsorted(self.meta.offsets, r, side="right") - 1
+            pix = self.meta.pix[r].astype(np.int64)
+            u = np.clip((pix // pl.SIZE + 0.5 - o) / span * g - 0.5, 0, g - 1)
+            v = np.clip((pix % pl.SIZE + 0.5 - o) / span * g - 0.5, 0, g - 1)
+            i0, j0 = np.floor(u).astype(np.int64), np.floor(v).astype(np.int64)
+            i1, j1 = np.minimum(i0 + 1, g - 1), np.minimum(j0 + 1, g - 1)
+            wu, wv = (u - i0).astype(np.float32)[:, None], (v - j0).astype(np.float32)[:, None]
+            G = self.grid
+            out[a:a + len(r)] = ((G[k, i0, j0] * (1 - wv) + G[k, i0, j1] * wv) * (1 - wu) +
+                                 (G[k, i1, j0] * (1 - wv) + G[k, i1, j1] * wv) * wu)
+        return out
+
+
+class Rows:
+    """A lazy (rows, features) view: slicing reads only that slice. Lets the probe standardise and stage its table
+    chunk by chunk instead of holding a float32 copy of every training pixel."""
+
+    def __init__(self, feats, rows):
+        self.feats, self.rows = feats, np.asarray(rows)
+        self.shape = (len(self.rows), len(feats.names))
+
+    def __len__(self):
+        return len(self.rows)
+
+    def __getitem__(self, s):
+        return self.feats.take(self.rows[s])
 
 
 def training_rows(regime, lists, meta, feats, cfg, rng, smoke):
@@ -223,7 +265,10 @@ def main(cfg):
     log(f"{cfg.split}/{cfg.fold} {cfg.input} {head.name}: {len(tr_rows):,} training pixels ({regime_info['regime']}), "
         f"{len(feats.names)} features, {len(va_rows):,} val / {len(te_rows):,} test pixels")
 
-    x_tr = feats.take(tr_rows) if len(tr_rows) else None
+    if head.kind == "probe":  # lazy: the probe reads its training table in chunks
+        x_tr = Rows(feats, tr_rows)
+    else:
+        x_tr = feats.take(tr_rows) if len(tr_rows) else None
     y_tr = meta.y[tr_rows]
     t_load = time.time() - t0
     tuning, best = [], {}
