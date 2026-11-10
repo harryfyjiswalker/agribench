@@ -247,6 +247,7 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `terramind` | TerraMind-1.0-base, 768-d, S2 + DEM tokens of the peak-greenness date, averaged per position | AgriBench: image FM, multimodal generative (any-to-any), extra modality DEM |
 | `clay` | Clay v1.5 ViT-L/8, 1024-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, MAE + DINOv2 representation loss, wavelength-conditioned |
 | `satmae` | SatMAE multispectral ViT-L/8, 1024-d, band-group tokens of the peak-greenness S2 scene, averaged per position | AgriBench: image FM, MAE with grouped-band masking |
+| `thor` | THOR-1.0-base, 768-d, band-group tokens of the peak-greenness S2 scene at native 10/20/60 m, averaged per position | AgriBench: image FM, multi-sensor (S1/S2/S3) FlexiViT MAE |
 | combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
@@ -426,7 +427,7 @@ SHA-256 and the runner refuses a mismatch):
   mean absolute innovation (observed − forecast LAI) and the largest observed LAI. Per-field seeds make it
   reproducible.
 - **Patch (image) foundation models** (`tools/patch_embed.py`, `tools/yieldsat_patches.py`) [AgriBench]:
-  `copernicusfm/`, `dofa/`, `croma/`, `softcon/`, `terramind/`, `clay/`, `satmae/`. These models embed an image, not a pixel series. Each field's
+  `copernicusfm/`, `dofa/`, `croma/`, `softcon/`, `terramind/`, `clay/`, `satmae/`, `thor/`. These models embed an image, not a pixel series. Each field's
   Raw folder holds its own rasters (12-band S2 L2A GeoTIFF per acquisition, SCL, DEM) on the field's bounding box
   in UTM at 10 m, with real reflectance outside the field, and each pixel's (row, col) in `v1/<subset>-meta.npz`
   indexes that grid. So no raster is rebuilt: the model sees the field's own scene. *Date (label-free):* the
@@ -470,7 +471,13 @@ SHA-256 and the runner refuses a mismatch):
     three groups (B02 B03 B04 B08 / B05 B06 B07 B8A / B11 B12), SentinelNormalize scaling (mean ± 2 std to
     [0, 1], fMoW-Sentinel statistics); 96 px windows (its pretraining size), 8 px tokens; the three group tokens
     after the final norm averaged per position. 1024-d.
-  - Not included: THOR (FM4CS/THOR-1.0). It needs the `thor_terratorch_ext` plugin, which has not been installed.
+  - `thor`: THOR-1.0-base (`FM4CS/THOR-1.0-base@9c13d7b`, Apache-2.0; code `thor_terratorch_ext@00223bb` and
+    `FM4CS/THOR@7ded3ce` in `envs/patchfm`), a FlexiViT with ALiBi attention pretrained on S1, S2 and S3. 12 bands
+    as reflectance, z-scored with THOR's pretraining statistics; 2880 m ground cover (288 px windows), which THOR
+    resamples to each band group's native grid (10 m RGB + NIR, 20 m red edge + SWIR, 60 m aerosol + water vapour);
+    8 px patches at 10 m (36 × 36 grid, 80 m). The group token grids from the last block are upsampled to 36 × 36
+    and averaged (`merge_method="mean"`). THOR loads with `strict=False`, so the script checks that every encoder
+    weight came from the checkpoint.
 
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
 
