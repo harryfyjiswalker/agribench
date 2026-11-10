@@ -796,12 +796,14 @@ def smoke(name):
     print(json.dumps({k: v for k, v in desc.items() if k != "feature_names"}, default=str)[:1500])
 
 
-# ---- submission --------------------------------------------------------------------------------------------------
+# ---- submission (smoke timings, 16 CPUs: Galileo 38 s/patch, THOR 118, Clay 67, TerraMind 62, AnySat 34,
+# Presto 22, SatMAE 18, CopernicusFM/DOFA/CROMA/SoftCon 9-13, OlmoEarth 8, Prithvi 6) --------------------------------------------------------------------------------------------------
 
 RESOURCES = {"galileo": ("40", "16", "48G", "12:00:00"), "presto": ("20", "16", "48G", "06:00:00"),
              "olmoearth": ("40", "16", "48G", "12:00:00"), "prithvi": ("20", "16", "64G", "08:00:00"),
              "anysat": ("20", "16", "64G", "08:00:00"),
-             "thor": ("20", "16", "64G", "08:00:00"), "clay": ("20", "16", "64G", "08:00:00"),
+             "thor": ("40", "16", "64G", "08:00:00"), "clay": ("40", "16", "64G", "06:00:00"),
+             "terramind": ("40", "16", "48G", "06:00:00"),
              "satmae": ("20", "16", "48G", "08:00:00")}
 DEFAULT_RESOURCES = ("10", "16", "48G", "06:00:00")
 SMALL = {"latlon": ("1", "2", "8G", "01:00:00"), "satclip": ("1", "4", "16G", "01:00:00"),
