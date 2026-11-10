@@ -8,3 +8,6 @@
 9c65c7062b98dbf77fa6cefe7f48211a7f08b79d PR 66: how folds are combined, not what a fold computes
 1987c42e7b2da9b8b1af63ece486fb98b0005062 PR 66: the dirty flag ignores results/ (provenance only)
 dfb9b9418e15211a89f2ddcdd889ba729acda525 this commit: how folds are combined, not what a fold computes
+2c638908d9b3ddb95b17b3c058750c19750ec770 config.yaml: input list in a comment only
+99f947a0b01ad2a0b74c8af7c26490d795ed2c13 PR 70: how folds are combined (probe added to the model-code list), not what a fold computes
+f4380c47b5dac8cf0f1ee7a64f11bb597596fe83 config.yaml: input list in a comment only
