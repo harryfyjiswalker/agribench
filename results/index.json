@@ -76,5 +76,25 @@
     "yieldsat/diagnostics/loco3-decomp.csv",
     "yieldsat/diagnostics/phase1-decomp.csv",
     "yieldsat/diagnostics/phase2-decomp.csv"
+  ],
+  "intervals": [
+    "yieldsat/diagnostics/crop1-ci.csv",
+    "yieldsat/diagnostics/crop1-gpu-ci.csv",
+    "yieldsat/diagnostics/early1-ci.csv",
+    "yieldsat/diagnostics/fm1-ci.csv",
+    "yieldsat/diagnostics/fm1-gpu-ci.csv",
+    "yieldsat/diagnostics/fm2-ci.csv",
+    "yieldsat/diagnostics/gpu1-ci.csv",
+    "yieldsat/diagnostics/gpu2-ci.csv",
+    "yieldsat/diagnostics/labels1-ci.csv",
+    "yieldsat/diagnostics/labels1-gpu-ci.csv",
+    "yieldsat/diagnostics/labels2-ci.csv",
+    "yieldsat/diagnostics/labels2-loco-ci.csv",
+    "yieldsat/diagnostics/loco1-ci.csv",
+    "yieldsat/diagnostics/loco1-gpu-ci.csv",
+    "yieldsat/diagnostics/loco2-ci.csv",
+    "yieldsat/diagnostics/loco3-ci.csv",
+    "yieldsat/diagnostics/phase1-ci.csv",
+    "yieldsat/diagnostics/phase2-ci.csv"
   ]
 }
