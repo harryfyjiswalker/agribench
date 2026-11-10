@@ -79,9 +79,10 @@ south_africa 0.61 / 3,737.
   Cambodia and Denmark test chips, and the used South Africa chips. That's about 2,600 images, roughly
   1.5 GB in 4 files. Denmark's 2.9 GB zip shrinks to about 0.4 GB, because only its 332 test chips are
   needed.
-- **Encoder features are not cached.** The input adapter trains in the frozen setting too (decision 6.6), so
-  the backbone's input changes every step and its features can't be computed once. The runs are small
-  enough that this costs little (section 4).
+- **Encoder features are not cached on the GPU path.** The input adapter trains in the frozen setting too
+  (decision 6.6), so the backbone's input changes every step and its features can't be computed once.
+  Models without an adapter (Galileo) can be cached instead; that is the cached frozen path (section 4c,
+  under validation).
 - **Unpacking the zips into folders on Lustre gains nothing:** 26,505 small files, slower to list and
   read, and no faster than the packed cache. If a tool really needs a folder tree (e.g. to rerun the
   EarthShift code unchanged), unpack to `$TMPDIR` on the compute node inside that job.
@@ -548,6 +549,54 @@ What these show:
   recipe (unweighted cross-entropy, no augmentation, stride-8 (Galileo) or stride-32 (ResNet) features for 1–2 px boundaries), and
   the paper's numbers are in the same range, so it is kept for comparability. A class-weighted loss would be a
   separate AgriBench variant (not run).
+
+## 4c. Cached frozen path [AgriBench, under validation]
+
+**Why.** The GPU partition is full and AgriBench's fair-share is low. In the frozen setting the backbone never
+changes, so for a model **without a trainable input adapter** its features can be computed once and the
+paper's decoder trained on them on CPU.
+
+**How.**
+
+    # 1. Features, once per model (eval mode, fp32, at the model's resized input size; about 70 min on 16 cores
+    #    for Galileo Base). Written to $project/inputs/earthshift/features-v1/<model>/ (about 6 GB), with a manifest.
+    sbatch -c 16 --mem 32G -t 3:00:00 prepare.sbatch tools.extract_earthshift_features --model galileo-base
+    # 2. Sweeps and finals as in section 4, adding --features (CPU, main partition):
+    sbatch -c 8 --mem 24G -t 1:30:00 prepare.sbatch tools.earthshift_train --model galileo-base \
+        --setting frozen --task de-geo --mode sweep --lr 1e-3 --features
+    # 3. Tables for this path only (rows carry "path": "cached"; the published CSV stays GPU-only):
+    $project/envs/benchmark-v2/bin/python -m tools.earthshift_results --path cached
+
+**The same as the GPU path:** splits, samples, resizing (bilinear antialias for images, nearest for masks),
+decoder, 40 epochs, batch 32, AdamW without weight decay, 20-epoch linear warm-up then cosine, cross-entropy
+with ignore index 255, learning-rate grid and selection on ID validation, seeds 0–4, the seeded data order,
+last-epoch scoring and the metric (logits upsampled to the input size, then to 256 × 256 for the native
+columns).
+
+**Known differences from the GPU path:**
+
+- **Backbone in eval mode, features computed once.** On the GPU path the whole model is in train mode, as in
+  the paper's code, so Galileo's drop-path is active during frozen training and every epoch sees slightly
+  different features. Here drop-path is off and every epoch sees the same features.
+- **fp32 on CPU** instead of bf16 autocast on GPU, for both the backbone and the decoder.
+- **Decoder initialisation differs per seed:** on the GPU path the backbone is built first and consumes random
+  numbers, so the same seed gives a different decoder start. The data order is the same.
+- **No adapter.** Only models whose bands go into native slots qualify (`CACHED_MODELS`: Galileo Base so far).
+
+**Validation** (Galileo Base frozen, sweep then the chosen rate, 5 seeds, all three training tasks) against
+section 4b. Acceptance rule: every test set within about 0.5 mIoU, or within 2 seed SDs where the SD is larger.
+Not adopted until the comparison has been reviewed. Results: pending.
+
+**Fixed-band models (not decided).** Models that are flexible about bands (DOFA, Copernicus-FM, Clay, and
+probably OlmoEarth and AnySat) take R, G, B and NIR in their native slots with no adapter, so they can be
+cached as Galileo is. Models with a fixed band set (CROMA, SoftCon, SatMAE, Prithvi, TerraMind) need one of:
+
+1. **Native slots plus zero-fill:** R, G, B and NIR go into their own bands and the missing bands are 0 after
+   the model's normalisation (that is, the band mean). No parameters, so cacheable once. Not what the paper
+   did, and the model sees inputs it was never trained on.
+2. **The paper's code: an untrained random 1×1 adapter** from 4 bands to the model's bands, fixed per seed.
+   Cacheable, but once per seed (5 feature sets). Matches the paper's released code, not its text.
+3. **A trained adapter (decision 6.6 as it stands):** not cacheable, so GPU only.
 
 ## 5. Out of scope
 
