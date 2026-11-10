@@ -29,12 +29,13 @@ COLUMNS = {"de-geo": [("Germany → Cambodia", "id", "ood_cambodia"), ("Germany 
            "za-season": [("South Africa A → B", "id", "ood")]}
 
 
-def load(root=RUNS):
+def load(root=RUNS, path="gpu"):
+    """Non-smoke rows of one training path: "gpu" (rows without a path field are GPU runs) or "cached" (4c)."""
     rows = []
     for path in sorted(Path(root).rglob("results.jsonl")):
         for line in path.read_text().splitlines():
             r = json.loads(line)
-            if not r.get("smoke"):
+            if not r.get("smoke") and r.get("path", "gpu") == path:
                 rows.append(r)
     return rows
 
@@ -146,9 +147,11 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--best-lr", action="store_true")
     p.add_argument("--root", type=Path, default=RUNS)
+    p.add_argument("--path", choices=["gpu", "cached"], default="gpu",
+                   help="which training path to summarise (cached = frozen decoder on cached features, 4c)")
     p.add_argument("--csv", type=Path, help="also write the public aggregate table to this path")
     args = p.parse_args()
-    rows = load(args.root)
+    rows = load(args.root, args.path)
     chosen, sweep = best_lrs(rows)
     if args.csv:
         args.csv.parent.mkdir(parents=True, exist_ok=True)

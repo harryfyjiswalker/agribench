@@ -13,6 +13,10 @@ Modes:
     sweep   learning-rate selection: scores the ID validation set only (2.3)
     final   scores ID and OOD test sets; needs --confirm-test and appends to the test ledger (2.7)
 Every (lr, seed) appends one JSON line to <out>/results.jsonl. --smoke uses a few samples and 1 epoch.
+
+Cached frozen path (4c): with --features, the frozen setting trains only the decoder on backbone features cached
+by tools.extract_earthshift_features (eval mode, fp32), on CPU. Only models without an input adapter qualify.
+Rows carry "path": "cached"; GPU rows carry "path": "gpu".
 """
 import argparse
 import json
@@ -37,6 +41,7 @@ from tools import earthshift as es
 RUNS = es.PROJECT / "runs" / "earthshift"
 LEDGER = RUNS / "test-ledger.jsonl"
 CHECKPOINTS = es.PROJECT / "checkpoints"
+FEATURES = es.INPUTS / "features-v1"  # cached frozen features, one folder per model (4c)
 
 # Training rules from the paper (2.2): epochs per setting, batch 32, 20-epoch warm-up then cosine, AdamW, no wd.
 EPOCHS = {"frozen": 40, "full": 50}
@@ -66,8 +71,9 @@ TRAIN_TASKS = {
 class Cache:
     """The packed per-country input cache (section 0), loaded into memory once."""
 
-    def __init__(self, root):
+    def __init__(self, root, features=None):
         self.root, self.images, self.masks, self.rows = Path(root), {}, {}, {}
+        self.feature_root, self.features = (Path(features) if features else None), {}
 
     def load(self, country):
         if country not in self.images:
@@ -75,11 +81,21 @@ class Cache:
             self.masks[country] = np.load(self.root / f"{country}-masks.npy", mmap_mode="r")
             idx = pd.read_csv(self.root / f"{country}-index.csv")
             self.rows[country] = {(a, w): r for r, a, w in zip(idx.row, idx.aoi_id, idx.window)}
+            if self.feature_root is not None:
+                f = np.load(self.feature_root / f"{country}-features.npy", mmap_mode="r")
+                if len(f) != len(idx):
+                    raise ValueError(f"{country}: {len(f)} cached features for {len(idx)} samples")
+                self.features[country] = f
         return self
 
+    @staticmethod
+    def month(country, window):
+        return WINDOW_MONTH[(country, window)]
+
     def gather(self, samples):
-        """uint16 images (N, 4, 256, 256), uint8 masks (N, 256, 256), months (N,) for a sample table."""
-        imgs, masks, months = [], [], []
+        """uint16 images (N, 4, 256, 256), uint8 masks (N, 256, 256), months (N,) and, with a feature cache,
+        float32 features (N, C, h, w) for a sample table."""
+        imgs, masks, months, feats = [], [], [], []
         for country, g in samples.groupby("country", sort=False):
             self.load(country)
             rows = np.array([self.rows[country][(a, w)] for a, w in zip(g.aoi_id, g.window)])
@@ -89,7 +105,12 @@ class Cache:
             imgs.append(np.asarray(self.images[country][rows[order]])[inv])
             masks.append(np.asarray(self.masks[country][rows[order]])[inv])
             months.append(np.array([WINDOW_MONTH[(country, w)] for w in g.window]))
-        return np.concatenate(imgs), np.concatenate(masks), np.concatenate(months)
+            if self.feature_root is not None:
+                feats.append(np.asarray(self.features[country][rows[order]])[inv])
+        out = {"images": np.concatenate(imgs), "masks": np.concatenate(masks), "months": np.concatenate(months)}
+        if feats:
+            out["features"] = np.concatenate(feats)
+        return out
 
 
 def load_split(name, role):
@@ -161,6 +182,10 @@ class Galileo(nn.Module):
         groups = list(g.SPACE_TIME_BANDS_GROUPS_IDX)
         self.st_keep = [groups.index(k) for k in ("S2_RGB", "S2_NIR_10m", "NDVI")]
         self.n_st_groups = len(groups)
+        self.weights_dir = CHECKPOINTS / "galileo" / "base"
+
+    def weights_sha256(self):
+        return {f.name: es.sha256(f) for f in sorted(self.weights_dir.iterdir()) if f.is_file()}
 
     def prepare(self, dn, months):
         b, _, h, w = dn.shape
@@ -192,6 +217,8 @@ MODELS = {
     "resnet50-random": lambda: ResNet50(pretrained=False),
     "galileo-base": Galileo,
 }
+# Models whose frozen features can be cached: no trainable input adapter (decision 6.6).
+CACHED_MODELS = {"galileo-base": Galileo}
 
 
 class Segmenter(nn.Module):
@@ -224,8 +251,11 @@ def set_trainable(model, setting):
 def resize(images_dn, masks, size):
     """Images: bilinear with antialias (torchvision Resize); masks: nearest (2.2)."""
     x = F.interpolate(images_dn.float(), size=(size, size), mode="bilinear", antialias=True, align_corners=False)
-    m = F.interpolate(masks[:, None].float(), size=(size, size), mode="nearest")[:, 0].to(torch.uint8)
-    return x, m
+    return x, resize_masks(masks, size)
+
+
+def resize_masks(masks, size):
+    return F.interpolate(masks[:, None].float(), size=(size, size), mode="nearest")[:, 0].to(torch.uint8)
 
 
 class Confusion:
@@ -321,6 +351,67 @@ def train_one(args, model_name, setting, lr, seed, train, val, tests, device):
     return result
 
 
+def evaluate_cached(decoder, data, size, batch=64):
+    """As evaluate(), from cached features: decoder logits upsampled to the input size (headline), then to
+    native 256 x 256 (secondary)."""
+    decoder.eval()
+    resized, native = Confusion(torch.device("cpu")), Confusion(torch.device("cpu"))
+    with torch.no_grad():
+        for s in range(0, len(data["masks"]), batch):
+            mk = torch.as_tensor(data["masks"][s:s + batch])
+            m = resize_masks(mk, size)
+            logits = F.interpolate(decoder(torch.as_tensor(data["features"][s:s + batch])), size=(size, size),
+                                   mode="bilinear", align_corners=False)
+            resized.update(logits.argmax(1), m)
+            up = F.interpolate(logits, size=mk.shape[-2:], mode="bilinear", align_corners=False)
+            native.update(up.argmax(1), mk)
+    r, n = resized.iou(), native.iou()
+    return {"miou": r["miou"], "iou": r["iou"], "miou_native": n["miou"], "iou_native": n["iou"],
+            "boundary_iou_native": n["iou"][2], "samples": int(len(data["masks"]))}
+
+
+def train_cached(args, lr, seed, train, val, tests, size):
+    """Frozen setting on cached features (4c): only the decoder trains, on CPU, fp32. Same epochs, batch,
+    optimiser, schedule, loss, data order (seeded permutation) and last-epoch scoring as train_one()."""
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    f_all = torch.as_tensor(train["features"])
+    m_all = resize_masks(torch.as_tensor(train["masks"]), size)
+    decoder = SimpleDecoder(f_all.shape[1])
+    epochs = 1 if args.smoke else EPOCHS["frozen"]
+    steps_per_epoch = math.ceil(len(m_all) / BATCH)
+    warm = min(WARMUP_EPOCHS, epochs) * steps_per_epoch
+    decay = max(epochs * steps_per_epoch - warm, 1)
+    opt = torch.optim.AdamW(decoder.parameters(), lr=lr, weight_decay=0)
+    sched = torch.optim.lr_scheduler.SequentialLR(opt, [
+        torch.optim.lr_scheduler.LinearLR(opt, start_factor=1e-6, end_factor=1.0, total_iters=warm),
+        torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=decay)], milestones=[warm])
+    loss_fn = nn.CrossEntropyLoss(ignore_index=255)
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    t0 = time.time()
+    for epoch in range(epochs):
+        decoder.train()
+        perm = torch.randperm(len(m_all), generator=gen)
+        total = 0.0
+        for s in range(0, len(perm), BATCH):
+            batch = perm[s:s + BATCH]
+            opt.zero_grad(set_to_none=True)
+            logits = F.interpolate(decoder(f_all[batch]), size=(size, size), mode="bilinear", align_corners=False)
+            loss = loss_fn(logits, m_all[batch].long())
+            loss.backward()
+            total += float(loss.detach()) * len(batch)
+            opt.step()
+            sched.step()
+        if epoch == 0 or (epoch + 1) % 10 == 0 or epoch + 1 == epochs:
+            print(f"    epoch {epoch + 1}/{epochs} loss {total / len(m_all):.4f} lr {sched.get_last_lr()[0]:.2e} "
+                  f"{time.time() - t0:.0f} s", flush=True)
+    result = {"val": evaluate_cached(decoder, val, size)}
+    for name, data in tests.items():
+        result[name] = evaluate_cached(decoder, data, size)
+    result["train_seconds"] = round(time.time() - t0, 1)
+    return result
+
+
 # ------------------------------------------------------------------------------------------------ main
 
 def git_commit():
@@ -343,15 +434,27 @@ def main():
     p.add_argument("--smoke", action="store_true", help="few samples, 1 epoch; scores are meaningless")
     p.add_argument("--cache", type=Path, default=es.INPUTS / "v1")
     p.add_argument("--out", type=Path)
+    p.add_argument("--features", type=Path, nargs="?", const="default",
+                   help="cached frozen path (4c): train the decoder on CPU from cached features "
+                        "(default folder: inputs/earthshift/features-v1/<model>)")
     args = p.parse_args()
+    if args.features is not None:
+        if args.setting != "frozen" or args.model not in CACHED_MODELS:
+            sys.exit(f"--features needs --setting frozen and a model without an adapter: {list(CACHED_MODELS)}")
+        if str(args.features) == "default":
+            args.features = FEATURES / args.model
+        manifest = json.loads((args.features / "manifest.json").read_text())
+        if manifest["model"] != args.model or (manifest["smoke"] and not args.smoke):
+            sys.exit(f"{args.features} holds {manifest['model']} features (smoke={manifest['smoke']})")
+        torch.set_num_threads(int(os.environ.get("SLURM_CPUS_PER_TASK", torch.get_num_threads())))
     if args.mode == "final" and not (args.confirm_test or args.smoke):
         sys.exit("--mode final scores the test sets; add --confirm-test (it is logged in the ledger)")
     lrs = args.lr or LR_GRID[args.setting]
     if not args.smoke and any(lr not in LR_GRID[args.setting] for lr in lrs):
         sys.exit(f"learning rates must come from the {args.setting} grid {LR_GRID[args.setting]}")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    cache = Cache(args.cache)
+    device = torch.device("cpu" if args.features else "cuda" if torch.cuda.is_available() else "cpu")
+    cache = Cache(args.cache, args.features)
     fit_split, test_defs = TRAIN_TASKS[args.task]
     tables = {"train": load_split(fit_split, "train"), "val": load_split(fit_split, "val")}
     if args.mode == "final":
@@ -360,8 +463,9 @@ def main():
         tables = {k: v.groupby("country", group_keys=False).head(40 if k == "train" else 8) for k, v in tables.items()}
     data = {}
     for k, t in tables.items():
-        imgs, masks, months = cache.gather(t)
-        data[k] = {"images": imgs, "masks": masks, "months": months}
+        data[k] = cache.gather(t)
+        if args.features:
+            del data[k]["images"]  # not needed: the decoder reads cached features
     print(f"{args.model} {args.setting} {args.task} {args.mode}: " +
           ", ".join(f"{k} {len(v['masks'])}" for k, v in data.items()), flush=True)
 
@@ -373,12 +477,19 @@ def main():
             "smoke": args.smoke, "epochs": 1 if args.smoke else EPOCHS[args.setting], "batch": BATCH,
             "split_sha256": split_hashes, "splits_manifest_sha256": es.sha256(es.SPLITS / "manifest.json"),
             "code_sha256": es.sha256(Path(__file__)), "git_commit": git_commit(), "job": job,
-            "torch": torch.__version__, "device": torch.cuda.get_device_name() if device.type == "cuda" else "cpu"}
+            "torch": torch.__version__, "device": torch.cuda.get_device_name() if device.type == "cuda" else "cpu",
+            "path": "cached" if args.features else "gpu"}
+    if args.features:
+        base["features"] = {"dir": str(args.features), "manifest_sha256": es.sha256(args.features / "manifest.json"),
+                            "threads": torch.get_num_threads()}
     tests = {k: v for k, v in data.items() if k not in ("train", "val")}
     for lr in lrs:
         for seed in args.seeds:
             print(f"  lr {lr:g} seed {seed}", flush=True)
-            r = train_one(args, args.model, args.setting, lr, seed, data["train"], data["val"], tests, device)
+            if args.features:
+                r = train_cached(args, lr, seed, data["train"], data["val"], tests, CACHED_MODELS[args.model].input_size)
+            else:
+                r = train_one(args, args.model, args.setting, lr, seed, data["train"], data["val"], tests, device)
             row = {**base, "lr": lr, "seed": seed, **r, "time": time.strftime("%Y-%m-%dT%H:%M:%S")}
             line = json.dumps(row) + "\n"
             with open(out / "results.jsonl", "a") as f:
