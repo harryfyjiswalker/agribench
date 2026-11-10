@@ -414,7 +414,10 @@ hashes of the split file, few-shot file, `meta.npz`, input `info.json` and resol
 **The probe** ([`tools/planteur_probe.py`](../tools/planteur_probe.py)) follows 3.6 exactly. Its 8 learning rates
 train together as 8 independent linear heads that see the same batches (one forward pass, one AdamW parameter
 group each). This is the same as 8 separate runs with one data order, at about the cost of one. AdamW's default
-weight decay (0.01) is used; the paper states none. The standardised training table sits on the GPU in float16.
+weight decay (0.01) is used; the paper states none. The standardised training table is kept in float16 (on the GPU
+when there is one). Sweeps run the probe on CPU (16 cores, 12 h; the GPU partition was full on 2026-11-10): the
+same head, learning-rate grid, seed and batch order, only the device differs, so CPU and GPU runs agree up to
+floating-point rounding in the float16 table and AdamW updates. `fold-<fold>.json` records the device.
 
 ### 6.3 Sweeps, results and the dashboard
 
@@ -422,7 +425,8 @@ weight decay (0.01) is used; the paper states none. The standardised training ta
         emb-tessera-v2 emb-olmoearth-v1.3 --models background probe lightgbm tabpfn tabicl
 
 [`tools/sweep_planteur.py`](../tools/sweep_planteur.py) runs one Slurm array task per fold (6 per input × head:
-default + 5 islands) from a frozen copy of the commit, at low priority on the GPU, and resumes where it stopped.
+default + 5 islands) from a frozen copy of the commit (the task runs that copy, never the live checkout), GPU heads at low priority, and
+resumes where it stopped.
 Every sweep task is a final test (`confirm_test=true`), because the heads and grids are fixed in advance and every
 choice inside a run uses val only. [`tools/collect_planteur.py`](../tools/collect_planteur.py) writes
 `results/planteur/<sweep>.csv`: one row per default test, per island, and the LOIO mean (only once all five
