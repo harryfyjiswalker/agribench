@@ -43,13 +43,12 @@ mkdir -p "$HOME/agribench-publish" && rm -rf "$HOME/agribench-publish"/* && mkdi
 cp results/yieldsat/*.csv "$HOME/agribench-publish/yieldsat/" 2>/dev/null || true
 cp results/planteur/*.csv "$HOME/agribench-publish/planteur/" 2>/dev/null || true
 git checkout -q results; git clean -fq results 2>/dev/null || true
-# EarthShift: use main's tool once merged, else the training branch's.
-if [ -f tools/earthshift_results.py ]; then es=$checkout; else
-  es=$checkout/../agribench-es-results
-  git fetch -q origin earthshift/training
-  [ -d "$es" ] || git worktree add -q --detach "$es" FETCH_HEAD
-  git -C "$es" checkout -q --detach "$(git rev-parse FETCH_HEAD)"
-fi
+# EarthShift: always the latest main's tool, in its own detached worktree. The sweep checkout stays pinned for
+# YieldSAT (code-version rule), so its copy of tools/earthshift_results.py can be out of date.
+es=$checkout/../agribench-es-results
+git fetch -q origin main
+[ -d "$es" ] || git worktree add -q --detach "$es" FETCH_HEAD
+git -C "$es" checkout -q --detach "$(git rev-parse FETCH_HEAD)"
 (cd "$es" && "$py" -m tools.earthshift_results --csv "$HOME/agribench-publish/earthshift/final.csv" >/dev/null) || echo "EarthShift export failed"
 # Diagnostics (bootstrap CIs, error decomposition, rank persistence; protocols/yieldsat.md 2.10) for every finished
 # run of every sweep, so every new result gets its decomposition in the same publish. Rows are cached per run, so
