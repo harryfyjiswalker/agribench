@@ -101,6 +101,10 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 | `olmoearth` | [OlmoEarth](https://github.com/allenai/olmoearth_pretrain)-v1.2-Base embedding of the pixel's in-season Sentinel-2 acquisitions at their real dates | 768 |
 | `anysat` | [AnySat](https://github.com/gastruc/AnySat)-Base embedding of the pixel, from in-season Sentinel-2 tiles of its field (spatial context) | 768 |
 | `prithvi` | [Prithvi-EO-2.0](https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M-TL)-300M-TL embedding at the pixel, from 4 in-season Sentinel-2 dates of the field's image (224-px windows) | 1024 |
+| `copernicusfm` | [Copernicus-FM](https://arxiv.org/abs/2503.11849) image embedding of the field's peak-greenness Sentinel-2 scene, sampled at the pixel | 768 |
+| `dofa` | [DOFA](https://arxiv.org/abs/2403.15356) image embedding of the peak-greenness scene, sampled at the pixel | 768 |
+| `croma` | [CROMA](https://arxiv.org/abs/2311.00566) optical-encoder embedding of the peak-greenness scene, sampled at the pixel | 768 |
+| `softcon` | [SoftCon](https://arxiv.org/abs/2405.20462) image embedding of the peak-greenness scene, sampled at the pixel | 768 |
 
 A location encoder gives a pixel the same embedding every year, so on its own it can't follow year-to-year
 changes in yield. It is meant to be combined with an input that changes over time, such as `s2+mind`. How each

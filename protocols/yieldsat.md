@@ -240,6 +240,10 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `weather-pheno` | 69 agronomic weather summaries per field in thermal-time crop-stage windows from sowing (GDD, heat, frost, rain, water balance) | AgriBench: year-level weather keyed to the crop calendar |
 | `wofost` | WOFOST 7.2 (PCSE) per field: potential and water-limited yield and biomass, max LAI, flowering and maturity, water stress (13) | AgriBench: process-based crop model |
 | `wofost-da`, `wofost-da-snap` | WOFOST 7.2 water-limited ensemble with field LAI assimilated by an EnKF (ARC or SNAP LAI), 12 | AgriBench: crop model + satellite hybrid |
+| `copernicusfm` | Copernicus-FM ViT-B/16, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, spectral hypernetwork, MAE + distillation |
+| `dofa` | DOFA ViT-B/16, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, wavelength-conditioned MAE |
+| `croma` | CROMA base optical encoder, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, radar-optical contrastive + MAE |
+| `softcon` | SoftCon ViT-B/14, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, soft contrastive (DINOv2 init) |
 | combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
@@ -418,6 +422,36 @@ SHA-256 and the runner refuses a mismatch):
   flowering, transpiration, days to flowering and maturity, the number of observations assimilated, the mean and
   mean absolute innovation (observed − forecast LAI) and the largest observed LAI. Per-field seeds make it
   reproducible.
+- **Patch (image) foundation models** (`tools/patch_embed.py`, `tools/yieldsat_patches.py`) [AgriBench]:
+  `copernicusfm/`, `dofa/`, `croma/`, `softcon/`. These models embed an image, not a pixel series. Each field's
+  Raw folder holds its own rasters (12-band S2 L2A GeoTIFF per acquisition, SCL, DEM) on the field's bounding box
+  in UTM at 10 m, with real reflectance outside the field, and each pixel's (row, col) in `v1/<subset>-meta.npz`
+  indexes that grid. So no raster is rebuilt: the model sees the field's own scene. *Date (label-free):* the
+  in-season (sowing to harvest; the harvest date only bounds the window) acquisition with the highest median EVI2
+  over the field's labelled pixels, among acquisitions whose SCL is clear (classes 4–7) on at least 90% of them
+  (fallbacks 60%, then the clearest). Every field in all nine subsets met the 90% bar. The median peak is 63–110
+  days after sowing for the summer crops and wheat in South America and 235–265 days for German wheat and
+  rapeseed (dates in `features/yieldsat/patch-dates/`, cluster only). *Windows:* the scene (NaN filled with the
+  band's scene median) is cut into windows of the model's native size at native 10 m. A box no larger than the
+  window gets one centred window; a larger box gets 50%-overlapping windows. Areas outside the box are filled by
+  reflection, and each pixel uses the window whose centre is nearest. *Pixel embedding:* the last-layer token grid
+  sampled bilinearly at the pixel centre, so a 16 px token covers 160 m and within-field detail comes from the
+  interpolation between tokens. *No S1 or location:* YieldSAT has no Sentinel-1, so the S1 branches of CROMA and
+  Copernicus-FM go unused. Location is withheld (Copernicus-FM gets its "unknown coordinates" token), so location
+  enters only through the location-encoder inputs, as for `galileo`. Raw embeddings (float32) are stored and the
+  heads handle width (TabPFN/TabICL reduce inside folds). Model code from torchgeo in `benchmark-v2`; weights
+  pinned under `upstream/<name>/weights/` and loaded tensors-only.
+  - `copernicusfm`: Copernicus-FM ViT-B/16 (varlang, `torchgeo/copernicus-fm@f395812`); per-band wavelength and
+    bandwidth; SSL4EO-S12 z-score (the Copernicus-Bench recipe); date and window area given as metadata; 224 px
+    windows, 16 px tokens; last-block tokens (the checkpoint has no final norm).
+  - `dofa`: DOFA ViT-B/16 (`torchgeo/dofa@b8db318`); band centre wavelengths; SSL4EO-S12 z-score; 224 px, 16 px
+    tokens; last-block tokens.
+  - `croma`: CROMA base optical encoder (`torchgeo/croma@387883f`), 12 bands; CROMA README scaling (mean ± 2 std
+    to [0, 1]) with fixed SSL4EO-S12 statistics instead of batch statistics; 120 px windows (native), 8 px tokens
+    (80 m).
+  - `softcon`: SoftCon ViT-B/14 13-band (`wangyi111/softcon@bae9097`, timm `vit_base_patch14_dinov2`); B10
+    (cirrus, absent from L2A) set to its SSL4EO mean; Copernicus-Bench SoftCon scaling (mean ± 2 std to [0, 1]);
+    224 px, 14 px tokens.
 
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
 
