@@ -1,6 +1,7 @@
 dataset,subset,scheme,input,model,folds,n_features,pixel_cap,pixel_r2_mean,pixel_r2_std,pixel_rmse_mean,pixel_rmse_std,field_r2_mean,field_r2_std,field_rmse_mean,field_rmse_std,pooled_pixel_r2,pooled_pixel_rmse,pooled_field_r2,pooled_field_rmse,task_hours,git_commit,sweep
 yieldsat,ARG-C,cv10,olmoearth,tabicl,10,768,32,0.5736,0.1115,2.3357,0.2629,0.7434,0.085,1.3528,0.322,0.5995,2.3553,0.7522,1.3971,0.094,e6081911ac,fm1-gpu
 yieldsat,ARG-C,cv10,olmoearth,tabpfn,10,768,32,0.609,0.1053,2.2321,0.2308,0.7811,0.0724,1.2429,0.3062,0.6361,2.2452,0.7896,1.2873,0.181,e6081911ac,fm1-gpu
+yieldsat,ARG-C,cv10,presto,tabicl,10,128,32,0.5321,0.1441,2.4424,0.287,0.7195,0.1031,1.3986,0.2917,0.564,2.4576,0.7389,1.4338,0.069,6256745a2a,fm1-gpu
 yieldsat,ARG-C,loro,olmoearth,tabicl,6,768,32,0.1651,0.2319,2.9391,0.4914,-0.4546,1.3618,2.2984,0.5565,0.2895,3.137,0.2743,2.3907,0.054,e6081911ac,fm1-gpu
 yieldsat,ARG-C,loro,olmoearth,tabpfn,6,768,32,0.177,0.308,2.894,0.5134,-0.5335,1.7305,2.2443,0.491,0.2904,3.1351,0.2847,2.3734,0.175,e6081911ac,fm1-gpu
 yieldsat,ARG-C,loyo,olmoearth,tabicl,8,768,32,0.0977,0.3878,3.102,0.6886,0.0323,0.6821,2.3029,0.9542,0.3041,3.1047,0.3514,2.26,0.056,e6081911ac,fm1-gpu
