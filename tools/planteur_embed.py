@@ -133,6 +133,21 @@ def part_ids(meta, part, parts):
     return [int(p) for p in meta.patch_ids[b[part]:b[part + 1]]], int(b[part])
 
 
+def code_commit():
+    """The frozen copy's COMMIT, else git HEAD (marked -dirty if the checkout has changes)."""
+    root = Path(__file__).resolve().parents[1]
+    if (root / "COMMIT").exists():
+        return (root / "COMMIT").read_text().strip()
+    try:
+        sha = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True,
+                             check=True).stdout.strip()
+        dirty = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
+                               capture_output=True, text=True).stdout.strip()
+        return sha + ("-dirty" if dirty else "")
+    except Exception:
+        return None
+
+
 def device():
     import torch
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -704,7 +719,7 @@ def run_part(name, part, parts):
         np.save(d / f".{part:03d}.tmp.npy", grid.astype(dtype))
         np.save(d / f".{part:03d}-valid.tmp.npy", np.array(g.valid))
         info = {"desc": desc, "notes": g.notes, "max_abs": float(np.abs(grid).max()), "dtype": np.dtype(dtype).name}
-    info.update(part=part, parts=parts, first_patch_index=start, patches=len(ids), seconds=round(time.time() - t0, 1),
+    info.update(code_commit=code_commit(), part=part, parts=parts, first_patch_index=start, patches=len(ids), seconds=round(time.time() - t0, 1),
                 device=str(device()) if name not in DENSE_INPUTS else "cpu")
     for suffix in ("", "-valid"):
         (d / f".{part:03d}{suffix}.tmp.npy").rename(d / f"{part:03d}{suffix}.npy")
@@ -724,7 +739,8 @@ def combine(name, parts):
     common = {"input": name, "rows": int(len(meta.y)), "meta_sha256": meta.sha256,
               "dataset_revision": "51b74a91424e7dc9ea1fe0042390353658af8185", "source": "DATA_S2_MONTHLY",
               "seconds": round(sum(i["seconds"] for i in infos), 1), "device": infos[0]["device"],
-              "max_abs": max(i["max_abs"] for i in infos)}
+              "max_abs": max(i["max_abs"] for i in infos),
+              "code_commit": sorted({i.get("code_commit") or "" for i in infos})}
     if name in DENSE_INPUTS:
         xs = [np.load(d / f"{i:03d}.npy", mmap_mode="r") for i in range(parts)]
         valid = np.concatenate([np.load(d / f"{i:03d}-valid.npy") for i in range(parts)])
