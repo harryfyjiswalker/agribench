@@ -111,10 +111,14 @@ class Model:
     prepare: Callable               # (12, H, W) DN, NaN filled -> (C, H, W) float32 model input
     encode: Callable                # (B, C, S, S) torch tensor on device, list of dates -> (B, D, S/token, S/token)
     description: dict = dfield(default_factory=dict)   # model, revision, weights sha256, settings for the json
+    with_dem: bool = False          # if True, prepare gets (13, H, W): the 12 S2 bands then the field's DEM (m)
 
 
-def _load_field(f, date, prepare, size):
-    img = prepare(yp.fill_nan(f.s2(date)))
+def _load_field(f, date, prepare, size, with_dem=False):
+    img = yp.fill_nan(f.s2(date))
+    if with_dem:
+        img = np.concatenate([img, yp.fill_nan(f.dem()[None])])
+    img = prepare(img)
     wins = yp.windows(*img.shape[1:], size)
     k = yp.assign(f.row, f.col, wins, size)
     crops = np.stack([yp.crop(img, r0, c0, size) for r0, c0 in wins]).astype(np.float32)
@@ -163,7 +167,7 @@ def run(model, subset, batch_windows=32, workers=6):
 
     with ThreadPoolExecutor(workers) as pool:
         jobs = pool.map(lambda f: _load_field(f, dt.date.fromisoformat(dates["fields"][f.name]["peak"]),
-                                              model.prepare, model.size), fs)
+                                              model.prepare, model.size, model.with_dem), fs)
         for i, (f, date, wins, k, crops) in enumerate(jobs):
             for j, (r0, c0) in enumerate(wins):
                 sel = k == j
