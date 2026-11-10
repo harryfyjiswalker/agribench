@@ -29,7 +29,9 @@ FOLDS = {"default": ["default"], "loio": ["reunion", "guadeloupe", "martinique",
 # First estimates (2026-11-10); tighten from sacct once the first sweep has run.
 RESOURCES = {
     "background": {"gpu": False, "cpus": 1, "mem": "8G",  "time": "00:20:00"},
-    "probe":      {"gpu": True,  "cpus": 8, "mem": "64G", "time": "04:00:00"},
+    # The probe runs on CPU (2026-11-10: the GPU partition was full for hours). Same head, grid and seed; only
+    # the device differs (protocols/planteur.md 6.2).
+    "probe":      {"gpu": False, "cpus": 16, "mem": "96G", "time": "12:00:00"},
     "lightgbm":   {"gpu": False, "cpus": 16, "mem": "32G", "time": "06:00:00"},
     "tabpfn":     {"gpu": True,  "cpus": 8, "mem": "48G", "time": "08:00:00"},
     "tabicl":     {"gpu": True,  "cpus": 8, "mem": "48G", "time": "08:00:00"},
