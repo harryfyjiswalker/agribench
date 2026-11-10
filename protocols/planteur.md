@@ -1,6 +1,7 @@
 # PLANTEUR evaluation protocol
 
-Status: **decisions D2–D7 agreed 2026-11-09; download scope (D1) still open; not downloaded, nothing run.** This page sets how
+Status: **all decisions agreed (D1 on 2026-11-10: full download, done and verified); Phase A pipeline built and its
+first sweep running (section 6); Phase B planned (section 7).** This page sets how
 every AgriBench model is scored on PLANTEUR, so results are comparable with the paper and with each other.
 Sections marked **[paper]** follow the authors exactly, citing the paper, the dataset card or the code. Sections
 marked **[AgriBench]** fill gaps the authors leave open, or go beyond them.
@@ -365,8 +366,130 @@ Agreed on 2026-11-09:
 - **D6. Parcel classification:** not now. It isn't in the paper, so there would be no reference numbers.
 - **D7. Missing embedding pixels:** left out of training, and scored as Background at test time (3.6).
 
-Still open:
+Settled on 2026-11-10:
 
-- **D1. Download scope.** Everything is 258 GB; core only is 133 GB. Section 1 lists what each part holds. The
-  monthly mosaics and the embeddings are only in the full download, and they are the inputs most of the paper's
-  rows use.
+- **D1. Download scope:** everything (258 GB, 52,263 files), downloaded at the pinned commit and verified against
+  the Hub's hashes (`MANIFEST.sha256`).
+
+---
+
+## 6. AgriBench implementation (Phase A)
+
+### 6.1 The pixel cache
+
+[`tools/build_planteur_features.py`](../tools/build_planteur_features.py) (a Slurm job, about 2 minutes per input
+on 8 cores) turns the patches into one table per input in `features/planteur/` (59 GB in all):
+
+- `meta.npz`: one row per **non-void** pixel of every patch (44,963,855 rows; 92,145 void pixels dropped, as the
+  card says), patches in ID order, pixels row-major. It holds the class, the pixel position, and each patch's row
+  range. Every split selects rows of the same tables, so the default split and the five LOIO folds share one copy.
+- `<input>/X.npy` + `valid.npy` + `info.json`. `s2-monthly` is the 10 `DATA_S2` bands of the 12 monthly mosaics,
+  month-major (`m00_B02` … `m11_B12`), as raw uint16 with 0 = no data (read as missing). The embeddings are the
+  shipped vectors stored as float16 (the largest |value| is 15.6, so float16 loses nothing that matters).
+  `valid` is False where the embedding is missing, NaN or all zero (D7). Counted: Tessera v1 842,326 pixels in
+  157 patches (6 with no file), Tessera v1.1 5,662 pixels in 4 patches, none for AEF, Tessera v2 and OlmoEarth.
+- The shipped `NORM_*` files are never read (D3).
+
+### 6.2 The runner
+
+[`run_planteur.py`](../run_planteur.py) (Hydra, `conf/planteur/`) runs one input × head × fold:
+`split=default fold=default`, or `split=loio fold=<reunion|guadeloupe|martinique|guyane|mayotte>`.
+
+1. Training pixels by the head's regime: `all` (probe), `cap-256` (LightGBM; at most 256 valid pixels per
+   training patch, seed 0), or `fewshot-X` (TabPFN, TabICL; `experiment.fewshot=X` for any head). Pixels without
+   an input value are dropped (D7).
+   - **[AgriBench] few-shot on LOIO.** The official few-shot pixels come from default-split `train` patches, and
+     these include every island, so they can't be used for a LOIO fold. For LOIO, X pixels per class are drawn
+     uniformly (seed 0) from the fold's own valid training pixels.
+2. The head's setting is chosen by mIoU-8 on **all** val pixels: the probe's learning rate, LightGBM's grid
+   (`num_leaves` 31/127 × `learning_rate` 0.05/0.1, 300 trees). TabPFN and TabICL have no grid.
+3. Without `experiment.confirm_test=true`, the run stops at val (development). With it, every test pixel is
+   predicted (pixels without input value → Background, D7), one confusion matrix gives mIoU-8, OA and per-class
+   IoU, and the run is appended to `runs/planteur/test-ledger.jsonl`.
+
+Each run writes `fold-<fold>.json` (val and test scores, the tuning table, the regime, pixel counts, and the
+hashes of the split file, few-shot file, `meta.npz`, input `info.json` and resolved config, plus the git commit),
+`fold-<fold>-confusion.npy` and `fold-<fold>-predictions.npz`. The last two stay on the cluster.
+
+**The probe** ([`tools/planteur_probe.py`](../tools/planteur_probe.py)) follows 3.6 exactly. Its 8 learning rates
+train together as 8 independent linear heads that see the same batches (one forward pass, one AdamW parameter
+group each). This is the same as 8 separate runs with one data order, at about the cost of one. AdamW's default
+weight decay (0.01) is used; the paper states none. The standardised training table sits on the GPU in float16.
+
+### 6.3 Sweeps, results and the dashboard
+
+    python -m tools.sweep_planteur --name pa1 --inputs s2-monthly emb-aef emb-tessera-v1 emb-tessera-v1.1 \
+        emb-tessera-v2 emb-olmoearth-v1.3 --models background probe lightgbm tabpfn tabicl
+
+[`tools/sweep_planteur.py`](../tools/sweep_planteur.py) runs one Slurm array task per fold (6 per input × head:
+default + 5 islands) from a frozen copy of the commit, at low priority on the GPU, and resumes where it stopped.
+Every sweep task is a final test (`confirm_test=true`), because the heads and grids are fixed in advance and every
+choice inside a run uses val only. [`tools/collect_planteur.py`](../tools/collect_planteur.py) writes
+`results/planteur/<sweep>.csv`: one row per default test, per island, and the LOIO mean (only once all five
+islands are in). [`tools/publish_results.sh`](../tools/publish_results.sh) collects every PLANTEUR sweep, and the
+dashboard's PLANTEUR view shows the default test beside the LOIO mean, the per-island table, and the paper's
+numbers for the same rows.
+
+### 6.4 First results
+
+Filled in as `pa1` finishes; see the dashboard for the live table.
+
+---
+
+## 7. Phase B plan [AgriBench]
+
+Phase B adds the frozen encoders AgriBench already wraps for YieldSAT, then early season and label efficiency. Every
+new input is written as a `features/planteur/<name>/` table aligned with `meta.npz`, so the runner, the heads and
+the sweep tool need no change beyond a line in `tools/planteur.INPUTS`, and the probe is the reference head for
+all of them.
+
+### 7.1 Encoders the paper also reports (Table 2 frozen-encoder rows)
+
+Input: the 12 monthly S2 mosaics, the 10 `DATA_S2` bands, months dated at their mid-points in 2019 (`MONTHLY/months.json`).
+Pixel features as the paper makes them (3.5): the encoder's token grid, **mean-pooled over 16 × 16 pixel windows**,
+then upsampled bilinearly to the 128 × 128 label grid.
+
+| Input | Encoder and settings | Reuses | Paper |
+|---|---|---|---|
+| `galileo-base` | Galileo base, patch size 4, S2 only, 12 monthly steps | `tools/embed_yieldsat_galileo.py`, `tools/extract_galileo.py` | 34.71 |
+| `presto-base` | Presto, patch size 1 (per pixel), S2 only, 12 monthly steps, the patch centre's lat/lon | `tools/embed_yieldsat_presto.py` | 16.25 |
+
+Presto's per-pixel features are pooled over the same 16 × 16 windows, to match the paper's setting. Both are
+cross-checked against the paper's numbers before anything else uses them.
+
+### 7.2 Further time-series encoders
+
+Same input and pooling, adapted from the YieldSAT wrappers:
+
+- **OlmoEarth v1.2 Base**, pixel patch 1 with the real month dates (`tools/embed_yieldsat_olmoearth.py`). This
+  can be checked against the shipped v1.3 embedding.
+- **AnySat** on the first 96 S2 observations of 2019 (`DATA_S2`, as in `card:326-327`), so it follows the paper's
+  input instead of the monthly one (`tools/embed_yieldsat_anysat.py`).
+- **Prithvi-EO-2.0 300M-TL**, 224-px windows reflect-padded from each 128-px patch, 4 monthly steps (the first
+  month, then the months of the patch's NDVI rise, peak and decline, chosen from the imagery only, not the labels)
+  (`tools/embed_yieldsat_prithvi.py`).
+
+### 7.3 Single-date (patch) encoders
+
+Copernicus-FM, DOFA, CROMA and SoftCon via `tools/patch_embed.py` (`tools/yieldsat_patches.py` supplies the
+YieldSAT windows; a PLANTEUR adapter supplies one image per patch). The date is the patch's **peak-greenness
+month** (highest median NDVI over the patch), chosen from the imagery only. The token grid is upsampled
+bilinearly to pixels, with no extra pooling (these encoders' tokens are already 8–16 px). TerraMind, THOR, Clay and
+SatMAE follow once the single-date session's terratorch environment exists.
+
+### 7.4 Early season
+
+`experiment.months=k` keeps the first k monthly mosaics (January to month k of 2019) of `s2-monthly`, already
+implemented (`--months` in the sweep tool, runs marked `@m04`). Plan: k = 2, 4, 6, 8, 10, and 12 = the full run,
+with the probe and LightGBM, on both splits. Annual embeddings can't be truncated; the time-series encoders of 7.1
+and 7.2 are re-embedded on the first k months (k = 4, 6, 8) once their full-year runs check out. The dashboard
+gets a PLANTEUR early-season view: mIoU-8 (LOIO mean and default test) against k.
+
+### 7.5 Label efficiency
+
+`experiment.fewshot=X` trains any head on the official few-shot pixels, X = 10, 25, 100, 1000 per class, already
+implemented (`--fewshot` in the sweep tool, runs marked `@x0100`). On the default split these are the authors'
+pixels, so the results compare with paper Table 7 (AEF 24.25, Tessera v2 27.23 at X = 1000). Plan: probe,
+LightGBM and TabPFN on every input, default split, single run (the official pixels have one seed), plus the full
+run as the last point. LOIO uses the AgriBench draw (6.2). With X = 10, the per-island scores are very noisy, so
+LOIO starts at X = 100. The dashboard gets a PLANTEUR label-efficiency view: mIoU-8 against X, log scale.

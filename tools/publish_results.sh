@@ -7,6 +7,7 @@
 # 1. On Anunna: runs tools.collect_yieldsat for every YieldSAT sweep (complete runs only; one small CPU job each)
 #    and tools.earthshift_results --csv for EarthShift (final runs so far, with their seed counts). YieldSAT
 #    diagnostics (tools.yieldsat_diagnostics) for every finished run, cached per run so only new runs are computed.
+#    PLANTEUR: tools.collect_planteur for every PLANTEUR sweep (finished test scores so far).
 # 2. Copies the aggregate CSVs into results/, rebuilds results/index.json, and opens a PR if anything changed.
 # Only aggregates are published (the repo is public): no field, tile or fold-level data.
 set -euo pipefail
@@ -30,9 +31,17 @@ for d in "$project"/runs/yieldsat/sweeps/*/; do
   ids+=("$(sbatch --parsable --job-name=ys-pub-collect-$s --time=00:30:00 --mem=8G --cpus-per-task=1 \
     --output="$d/_logs/pubcollect-%j.log" prepare.sbatch tools.collect_yieldsat --sweep "$s")")
 done
+rm -f results/planteur/*.csv.tmp
+for d in "$project"/runs/planteur/sweeps/*/; do
+  [ -d "$d" ] || continue
+  s=$(basename "$d"); [[ $s == _* ]] && continue
+  sbatch --parsable --job-name=ys-pub-collect-pl-$s --time=00:20:00 --mem=4G --cpus-per-task=1 \
+    --output="$d/_logs/pubcollect-%j.log" prepare.sbatch tools.collect_planteur --sweep "$s" >/dev/null
+done
 for _ in $(seq 1 90); do squeue --me -h -o %j | grep -q ys-pub-collect || break; sleep 10; done
-mkdir -p "$HOME/agribench-publish" && rm -rf "$HOME/agribench-publish"/* && mkdir -p "$HOME/agribench-publish/yieldsat" "$HOME/agribench-publish/earthshift"
+mkdir -p "$HOME/agribench-publish" && rm -rf "$HOME/agribench-publish"/* && mkdir -p "$HOME/agribench-publish/yieldsat" "$HOME/agribench-publish/earthshift" "$HOME/agribench-publish/planteur"
 cp results/yieldsat/*.csv "$HOME/agribench-publish/yieldsat/" 2>/dev/null || true
+cp results/planteur/*.csv "$HOME/agribench-publish/planteur/" 2>/dev/null || true
 git checkout -q results; git clean -fq results 2>/dev/null || true
 # EarthShift: use main's tool once merged, else the training branch's.
 if [ -f tools/earthshift_results.py ]; then es=$checkout; else
@@ -59,7 +68,7 @@ stamp=$(date +%Y%m%d-%H%M)
 branch=results/auto-$stamp
 git checkout -q main && git pull -q
 git checkout -q -b "$branch"
-for ds in yieldsat earthshift yieldsat/diagnostics; do
+for ds in yieldsat earthshift planteur yieldsat/diagnostics; do
   mkdir -p results/$ds
   scp -q "$HOST:agribench-publish/$ds/*.csv" results/$ds/ 2>/dev/null || true
 done
