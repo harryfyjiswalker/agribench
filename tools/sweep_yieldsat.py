@@ -29,6 +29,7 @@ from pathlib import Path
 import pandas as pd
 
 from tools import yieldsat as ys
+from tools.yieldsat_results import same_model_code
 
 SLURM = "/cm/shared/apps/slurm/current/bin"
 SCHEMES = ("cv10", "loyo", "loro", "loco")
@@ -129,7 +130,7 @@ def variants(args):
 
 
 def supersede_mixed(runs_root, args):
-    """Move aside every requested run whose folds were run with different code versions (they can't be combined)."""
+    """Move aside every requested run whose folds were run with code versions that differ in model code."""
     import json
     import shutil
     moved = 0
@@ -138,7 +139,7 @@ def supersede_mixed(runs_root, args):
             for model in args.models:
                 d = runs_root / label / scheme / spec / model
                 commits = {json.loads(f.read_text())["provenance"].get("git_commit") for f in d.glob("fold-*.json")}
-                if len(commits) > 1:
+                if len(commits) > 1 and not same_model_code(commits):
                     dest = runs_root / "_superseded" / "mixed-code" / label / scheme / spec
                     dest.mkdir(parents=True, exist_ok=True)
                     shutil.move(str(d), str(dest / f"{model}-{int(time.time())}"))

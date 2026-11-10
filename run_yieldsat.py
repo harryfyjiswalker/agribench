@@ -198,8 +198,9 @@ def git_commit(directory):
     try:
         sha = subprocess.run(["git", "-C", str(directory), "rev-parse", "HEAD"], capture_output=True, text=True,
                              check=True).stdout.strip()
-        dirty = subprocess.run(["git", "-C", str(directory), "status", "--porcelain", "--untracked-files=no"],
-                               capture_output=True, text=True).stdout.strip()
+        # results/ holds the aggregate tables collect jobs write into the checkout; it isn't code
+        dirty = subprocess.run(["git", "-C", str(directory), "status", "--porcelain", "--untracked-files=no", "--",
+                                ".", ":(exclude)results"], capture_output=True, text=True).stdout.strip()
         return sha + ("-dirty" if dirty else "")
     except Exception:
         return None
