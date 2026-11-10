@@ -28,6 +28,10 @@ Encoders:
       average_tokens per window (protocol 7.1: the paper's patch 4 / window 16) -> 8 x 8 grid.
   presto    Presto, per pixel (patch size 1), 12 months, the patch centre's lat/lon, pooled over 16 x 16 px windows
       (protocol 7.1) -> 8 x 8 grid.
+  olmoearth OlmoEarth-v1.2-Base on 16 x 16 px windows of the monthly series, patch size 4 -> 8 x 8 grid (differs from
+      the shipped v1.3 128-d read-out).
+  prithvi   Prithvi-EO-2.0-300M-TL, 4 label-free months (January, NDVI rise, peak, decline), 224 px window -> 14 x 14.
+  anysat    AnySat-Base on the first 96 DATA_S2 observations of 2019 (the paper's input), patch 160 m -> 8 x 8.
   latlon / satclip / mind   lat/lon of the 8 x 8 grid cell centres (from ANNOTATIONS_GEOTIFF's CRS and transform),
       raw (float32) or through the SatCLIP / MIND location encoders of tools/embed_yieldsat_location.py.
   s2-harmonic   per pixel and band, c0 + 2 harmonics fitted to the 12 monthly values (t = day of year of the month
@@ -61,7 +65,8 @@ LOC_GRID = 8              # location inputs: 8 x 8 cells of 16 px (160 m)
 PEAK_RULE = (f"peak greenness: the month with the highest median NDVI over all 128 x 128 pixels, among months with "
              f">= {MIN_COVER:.0%} of pixels observed (else the best-covered month); label-free")
 PATCH_MODELS = ["copernicusfm", "dofa", "croma", "softcon", "clay", "satmae", "thor", "terramind"]
-GRID_INPUTS = PATCH_MODELS + ["galileo", "presto", "latlon", "satclip", "mind"]
+TIME_SERIES = ["galileo", "presto", "olmoearth", "prithvi", "anysat"]
+GRID_INPUTS = PATCH_MODELS + TIME_SERIES + ["latlon", "satclip", "mind"]
 DENSE_INPUTS = ["s2-harmonic", "biophys"]
 PATCHFM_ENV = pl.PROJECT / "envs" / "patchfm" / "bin" / "python"
 NEEDS_PATCHFM = {"clay", "satmae", "thor", "terramind"}
@@ -409,6 +414,213 @@ def run_location(name, ids):
                  "input": f"lat/lon of {LOC_GRID} x {LOC_GRID} cell centres ({pl.SIZE // LOC_GRID} px) per patch"}
 
 
+def window_series(a, w=POOL):
+    """(T, C, H, W) -> (windows, w, w, T, C) gap-filled, and (windows, T) month usable (>= MIN_COVER observed)."""
+    T, C, H, W = a.shape
+    x = a.reshape(T, C, H // w, w, W // w, w).transpose(2, 4, 3, 5, 0, 1).reshape(-1, w, w, T, C).copy()
+    obs = np.isfinite(x).all(-1).mean((1, 2)) >= MIN_COVER
+    for k in range(len(x)):
+        for t in range(T):
+            xt = x[k, :, :, t]
+            bad = ~np.isfinite(xt)
+            if bad.any():
+                med = np.nanmedian(xt.reshape(-1, C), 0) if np.isfinite(xt).any() else np.zeros(C)
+                xt[bad] = np.broadcast_to(np.nan_to_num(med), xt.shape)[bad]
+    return x, obs
+
+
+def run_olmoearth(ids, batch=32):
+    """OlmoEarth-v1.2-Base on 16 x 16 px windows of the monthly series at patch size 4, months at their mid-points;
+    mean of the window's S2 tokens. (YieldSAT runs it per pixel at patch size 1; over 45 M pixels that is ~100x the
+    compute, and protocol 7.1/7.2 pools to 16 px windows anyway.)"""
+    import torch
+    from tools import embed_yieldsat_olmoearth as yo
+    model = yo.load_model()
+    from olmoearth_pretrain.data.constants import Modality
+    from olmoearth_pretrain.data.normalize import Normalizer, Strategy
+    from olmoearth_pretrain.datatypes import MaskedOlmoEarthSample, MaskValue
+    dev = device()
+    enc = model.encoder.to(dev)
+    bands = list(Modality.SENTINEL2_L2A.band_order)
+    bidx = [MONTHLY_BANDS.index(b) for b in bands]
+    n_sets = len(Modality.SENTINEL2_L2A.band_sets)
+    normalizer = Normalizer(Strategy.COMPUTED)
+    stamps = np.array([[d.day, d.month - 1, d.year] for d in MONTH_MID], np.int64)
+    nw, w = pl.SIZE // POOL, POOL
+    out = Grid()
+    with ThreadPoolExecutor(4) as ex, torch.inference_mode():
+        for p, (x, obs) in zip(ids, ex.map(lambda p: window_series(monthly(p)[:, bidx]), ids)):
+            emb = np.full((len(x), 0), np.nan, np.float32)
+            k = obs.sum(1)
+            for kk in np.unique(k[k > 0]):
+                rows = np.flatnonzero(k == kk)
+                for b0 in range(0, len(rows), batch):
+                    r = rows[b0:b0 + batch]
+                    order = np.argsort(~obs[r], axis=1, kind="stable")[:, :kk]           # kept months, in order
+                    v = np.take_along_axis(x[r], order[:, None, None, :, None], 3)       # (b, w, w, kk, C)
+                    v = np.asarray(normalizer.normalize(Modality.SENTINEL2_L2A, v), np.float32)
+                    sample = MaskedOlmoEarthSample(
+                        sentinel2_l2a=torch.as_tensor(v, device=dev),
+                        sentinel2_l2a_mask=torch.full((len(r), w, w, int(kk), n_sets),
+                                                      float(MaskValue.ONLINE_ENCODER.value), device=dev),
+                        timestamps=torch.as_tensor(stamps[order], device=dev))
+                    tok = enc(sample, fast_pass=True, patch_size=4)["tokens_and_masks"].sentinel2_l2a
+                    e = tok.mean(dim=(1, 2, 3, 4)).float().cpu().numpy()
+                    if not np.isfinite(e).all():
+                        raise RuntimeError(f"Non-finite OlmoEarth output, patch {p}")
+                    if emb.shape[1] == 0:
+                        emb = np.full((len(x), e.shape[1]), np.nan, np.float32)
+                    emb[r] = e
+            has = k > 0
+            if not has.all():
+                emb[~has] = np.nanmean(emb[has], 0) if has.any() else 0
+            out.add(emb.reshape(nw, nw, -1), valid=bool(has.any()), windows_without_data=int((~has).sum()))
+    dim = out.grids[0].shape[-1]
+    return out, {"origin": 0, "span": pl.SIZE, "grid": nw, "dim": dim, "names": "olmoearth_",
+                 "model": "OlmoEarth-v1.2-Base encoder", "hf_repo": yo.HF_REPO, "hf_revision": yo.HF_REVISION,
+                 "source_revision": yo.SOURCE_REVISION, "weights_sha256": pl.sha256(yo.WEIGHTS / "weights.pth"),
+                 "input": "12 monthly mosaics, S2 L2A 12 bands, timestamps = month mid-points; months with "
+                          f"< {MIN_COVER:.0%} of a window observed left out, other gaps window-month median",
+                 "window": f"{POOL} x {POOL} px, patch size 4", "normalization": "Normalizer(Strategy.COMPUTED)",
+                 "pooling": "mean of the window's S2 output tokens (space, time, band sets)",
+                 "differs_from_shipped": "EMB_OLMOEARTH_V1_3 is v1.3, 128-d projected read-out, patch 2 / latent 1"}
+
+
+def prithvi_months(a):
+    """Four label-free months, sorted: January, NDVI rise (last month before the peak at or below the midpoint
+    between the year's minimum and peak median NDVI), the peak (peak_month), decline (first month after it at or
+    below that midpoint). Repeats are allowed."""
+    v = ndvi(a)
+    med = np.array([np.nanmedian(v[m]) if np.isfinite(v[m]).any() else np.nan for m in range(len(v))])
+    peak, _ = peak_month(a)
+    mid = (np.nanmin(med) + med[peak]) / 2
+    up = max([m for m in range(peak) if med[m] <= mid] or [0])
+    down = min([m for m in range(peak + 1, len(med)) if med[m] <= mid] or [len(med) - 1])
+    return sorted([0, up, peak, down])
+
+
+def run_prithvi(ids, batch=4):
+    import torch
+    from tools import embed_yieldsat_prithvi as ypr
+    from tools import yieldsat_patches as yp
+    dev = device()
+    enc, cfg = ypr.load_model(dev)
+    bidx = [MONTHLY_BANDS.index(b) for b in ypr.S2_FOR_HLS]
+    mean = np.asarray(cfg["mean"], np.float32)[:, None, None]
+    std = np.asarray(cfg["std"], np.float32)[:, None, None]
+    size, frames = ypr.SIZE, ypr.FRAMES
+    g = size // cfg["patch_size"][1]
+    o = -((size - pl.SIZE) // 2)
+    out = Grid()
+
+    def load(p):
+        a = monthly(p)
+        months = prithvi_months(a)
+        x = np.stack([yp.crop((fill_nan(a[m][bidx]) - mean) / std, o, o, size) for m in months], 1)  # C, T, S, S
+        return p, months, x.astype(np.float32)
+
+    todo = []
+
+    def flush():
+        if not todo:
+            return
+        x = torch.as_tensor(np.stack([t[2] for t in todo]), device=dev)
+        coords = torch.tensor([[[2019, MONTH_MID[m].timetuple().tm_yday] for m in t[1]] for t in todo],
+                              dtype=torch.float32, device=dev)
+        with torch.inference_mode():
+            tok = enc.forward_features(x, coords, None)[-1][:, 1:]
+        tok = tok.reshape(len(todo), frames, g, g, -1).mean(1).float().cpu().numpy()
+        if not np.isfinite(tok).all():
+            raise RuntimeError("Non-finite Prithvi output")
+        for (p, months, _), t in zip(todo, tok):
+            out.add(t, months=months)
+        todo.clear()
+
+    with ThreadPoolExecutor(4) as ex:
+        for item in ex.map(load, ids):
+            todo.append(item)
+            if len(todo) >= batch:
+                flush()
+    flush()
+    return out, {"origin": o, "span": size, "grid": g, "dim": cfg["embed_dim"], "names": "prithvi_",
+                 "model": "Prithvi-EO-2.0-300M-TL encoder", "hf_repo": ypr.HF_REPO, "hf_revision": ypr.HF_REVISION,
+                 "weights_sha256": pl.sha256(ypr.WEIGHTS),
+                 "input": "S2 B02,B03,B04,B8A,B11,B12 (as HLS B02-B07) DN of 4 monthly mosaics: January, NDVI rise, "
+                          "peak, decline (prithvi_months, label-free); checkpoint mean/std; 224 px window centred on "
+                          "the patch, reflection padding; temporal coords (2019, day of year of the month mid-point); "
+                          "no location coords",
+                 "pooling": "last-layer tokens averaged over the 4 frames; bilinear at the pixel centre"}
+
+
+ANYSAT_MAX_T = 96          # card: the paper's AnySat input is the first 96 S2 observations of 2019
+ANYSAT_PATCH_M = POOL * 10  # AnySat patch = 16 px (160 m): its "patch" output is one token per 16 x 16 px window
+
+
+def s2_dates():
+    feats = json.loads((pl.DATA / "metadata.geojson").read_text())["features"]
+    return {int(f["properties"]["ID_PATCH"]): [dt.datetime.strptime(str(v), "%Y%m%d").date()
+                                               for _, v in sorted(f["properties"]["dates-S2"].items(),
+                                                                  key=lambda kv: int(kv[0]))] for f in feats}
+
+
+def anysat_stats(meta, n_patches=64, n_obs=8, n_pix=2048):
+    """Band mean/std of nonzero DATA_S2 values over a seeded sample of patches, 2019 observations and pixels
+    (no labels; deterministic, so every part computes the same numbers)."""
+    rng = np.random.default_rng(0)
+    dates = s2_dates()
+    vals = []
+    for p in np.sort(rng.choice(meta.patch_ids, n_patches, replace=False)):
+        a = np.load(pl.DATA / "DATA_S2" / f"S2_{int(p)}.npy", mmap_mode="r")
+        t19 = [i for i, d in enumerate(dates[int(p)]) if d.year == 2019][:ANYSAT_MAX_T]
+        ts = np.sort(rng.choice(t19, min(n_obs, len(t19)), replace=False))
+        pix = rng.choice(pl.SIZE * pl.SIZE, n_pix, replace=False)
+        v = np.asarray(a[ts]).reshape(len(ts), 10, -1)[:, :, pix].transpose(0, 2, 1).reshape(-1, 10)
+        vals.append(v[(v > 0).all(1)])
+    v = np.concatenate(vals).astype(np.float64)
+    return v.mean(0).astype(np.float32), v.std(0).astype(np.float32), int(len(v))
+
+
+def run_anysat(ids):
+    import torch
+    from tools import embed_yieldsat_anysat as ya
+    if ya.BANDS != pl.S2_BANDS:
+        raise ValueError("AnySat band order differs from DATA_S2")
+    dev = device()
+    model = ya.load_model(dev)
+    meta = pl.Meta()
+    mean, std, n_stat = anysat_stats(meta)
+    dates = s2_dates()
+    g = pl.SIZE // POOL
+    out = Grid()
+
+    def load(p):
+        t19 = [i for i, d in enumerate(dates[p]) if d.year == 2019][:ANYSAT_MAX_T]
+        a = np.load(pl.DATA / "DATA_S2" / f"S2_{p}.npy")
+        if a.shape[1:] != (10, pl.SIZE, pl.SIZE) or len(dates[p]) != len(a):
+            raise ValueError(f"S2_{p}.npy: shape {a.shape} vs {len(dates[p])} dates")
+        x = ((a[t19].astype(np.float32) - mean[:, None, None]) / std[:, None, None])
+        first = dates[p][t19[0]]
+        days = [(dates[p][i] - dt.date(first.year, first.month, 1)).days for i in t19]
+        return p, x, np.array(days, np.float32)
+
+    with ThreadPoolExecutor(2) as ex, torch.inference_mode():
+        for p, x, days in ex.map(load, ids):
+            o = model({"s2": torch.as_tensor(x[None], device=dev),
+                       "s2_dates": torch.as_tensor(days[None], device=dev)},
+                      patch_size=ANYSAT_PATCH_M, output="patch").float().cpu().numpy()[0]
+            if o.shape[:2] != (g, g) or not np.isfinite(o).all():
+                raise RuntimeError(f"AnySat output {o.shape} for patch {p}")
+            out.add(o, observations=len(days))
+    return out, {"origin": 0, "span": pl.SIZE, "grid": g, "dim": out.grids[0].shape[-1], "names": "anysat_",
+                 "model": "AnySat-Base", "hf_repo": ya.HF_REPO, "hf_revision": ya.HF_REVISION,
+                 "source_revision": ya.SOURCE_REVISION,
+                 "input": f"DATA_S2 10 bands, the first {ANYSAT_MAX_T} observations of 2019 (dates-S2), as the paper's "
+                          "AnySat input (card); dates = days since the 1st of the first observation's month; the "
+                          "whole 128 px patch as one tile",
+                 "normalization": f"band mean/std of nonzero values, seeded sample ({n_stat} values, no labels)",
+                 "pooling": f"AnySat output='patch' at patch size {ANYSAT_PATCH_M} m: one token per 16 x 16 px"}
+
+
 # ---- dense per-pixel inputs --------------------------------------------------------------------------------------
 
 def dense_harmonic():
@@ -456,6 +668,14 @@ def dense_biophys():
                               "missing": "months without data stay NaN (the heads impute or standardise to 0)"}
 
 
+def encoder_output(name, ids):
+    if name in PATCH_MODELS:
+        return run_patch_model(name, ids)
+    if name in TIME_SERIES:
+        return globals()[f"run_{name}"](ids)
+    return run_location(name, ids)
+
+
 # ---- parts and combine -------------------------------------------------------------------------------------------
 
 def run_part(name, part, parts):
@@ -478,14 +698,7 @@ def run_part(name, part, parts):
         np.save(d / f".{part:03d}-valid.tmp.npy", np.concatenate(oks))
         info = {"names": names, "desc": desc, "rows": int(len(x)), "max_abs": float(np.nanmax(np.abs(x)))}
     else:
-        if name in PATCH_MODELS:
-            g, desc = run_patch_model(name, ids)
-        elif name == "galileo":
-            g, desc = run_galileo(ids)
-        elif name == "presto":
-            g, desc = run_presto(ids)
-        else:
-            g, desc = run_location(name, ids)
+        g, desc = encoder_output(name, ids)
         grid = np.stack(g.grids)
         dtype = np.float32 if desc.get("dtype") == "float32" or np.abs(grid).max() >= 6e4 else np.float16
         np.save(d / f".{part:03d}.tmp.npy", grid.astype(dtype))
@@ -560,8 +773,7 @@ def smoke(name):
         x, ok = per_patch(ids[0], meta.pix[meta.offsets[k]:meta.offsets[k + 1]])
         print(name, x.shape, len(names), "valid", ok.mean(), "nan share", np.isnan(x).mean(), "max", np.nanmax(x))
         return
-    run = {"galileo": run_galileo, "presto": run_presto}.get(name)
-    g, desc = run(ids) if run else (run_patch_model(name, ids) if name in PATCH_MODELS else run_location(name, ids))
+    g, desc = encoder_output(name, ids)
     grid = np.stack(g.grids)
     print(name, grid.shape, "valid", g.valid, "notes", g.notes[:2], "max_abs", float(np.abs(grid).max()),
           f"{time.time() - t0:.0f}s for {len(ids)} patches", flush=True)
@@ -571,6 +783,8 @@ def smoke(name):
 # ---- submission --------------------------------------------------------------------------------------------------
 
 RESOURCES = {"galileo": ("40", "16", "48G", "12:00:00"), "presto": ("20", "16", "48G", "06:00:00"),
+             "olmoearth": ("40", "16", "48G", "12:00:00"), "prithvi": ("20", "16", "64G", "08:00:00"),
+             "anysat": ("20", "16", "64G", "08:00:00"),
              "thor": ("20", "16", "64G", "08:00:00"), "clay": ("20", "16", "64G", "08:00:00"),
              "satmae": ("20", "16", "48G", "08:00:00")}
 DEFAULT_RESOURCES = ("10", "16", "48G", "06:00:00")

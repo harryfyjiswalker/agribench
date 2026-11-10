@@ -49,7 +49,7 @@ INPUTS = {
 }
 # Inputs AgriBench builds from DATA_S2_MONTHLY (tools/planteur_embed.py, protocol 7): "grid" = per-patch token grids
 # sampled per pixel by the runner, "dense" = per-pixel tables like the ones above.
-for _name in ["galileo", "presto", "copernicusfm", "dofa", "croma", "softcon", "clay", "satmae", "thor", "terramind",
+for _name in ["galileo", "presto", "olmoearth", "prithvi", "anysat", "copernicusfm", "dofa", "croma", "softcon", "clay", "satmae", "thor", "terramind",
               "latlon", "satclip", "mind"]:
     INPUTS[_name] = {"kind": "grid", "builder": "tools.planteur_embed"}
 for _name in ["s2-harmonic", "biophys"]:
