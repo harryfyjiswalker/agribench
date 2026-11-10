@@ -44,7 +44,9 @@ def write_fold(out, common, row, field_names, field, y, p, tuning_rows):
 
 # Files that determine a YieldSAT result. Folds run with different commits are combined only when none of these
 # differ between the commits (e.g. a change to the dashboard or the publish script doesn't matter).
-MODEL_CODE = ["run_yieldsat.py", "conf/yieldsat", "tools/yieldsat.py", "tools/yieldsat_results.py"]
+# Everything a fold's result depends on: the runner, its configs, the data/feature helpers and the ridge probe head
+# (the other heads are pinned library versions in the shared env).
+MODEL_CODE = ["run_yieldsat.py", "conf/yieldsat", "tools/yieldsat.py", "tools/yieldsat_results.py", "tools/probe.py"]
 
 
 # Commits that touched MODEL_CODE without changing any result a run could produce before them, one per line with
