@@ -144,12 +144,12 @@ def build_input(name, workers):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--input", required=True, choices=["meta", "all", *pl.INPUTS])
+    parser.add_argument("--input", required=True, choices=["meta", "all", *pl.SHIPPED])
     parser.add_argument("--workers", type=int, default=8)
     args = parser.parse_args()
     if args.input in ("meta", "all"):
         build_meta(args.workers)
-    for name in (pl.INPUTS if args.input == "all" else [args.input] if args.input != "meta" else []):
+    for name in (pl.SHIPPED if args.input == "all" else [args.input] if args.input != "meta" else []):
         build_input(name, args.workers)
 
 

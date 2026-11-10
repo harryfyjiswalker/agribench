@@ -47,6 +47,14 @@ INPUTS = {
     "emb-tessera-v2": {"kind": "emb", "folder": "EMB_TESSERA_V2", "prefix": "TESSERA"},
     "emb-olmoearth-v1.3": {"kind": "emb", "folder": "EMB_OLMOEARTH_V1_3", "prefix": "OE13"},
 }
+# Inputs AgriBench builds from DATA_S2_MONTHLY (tools/planteur_embed.py, protocol 7): "grid" = per-patch token grids
+# sampled per pixel by the runner, "dense" = per-pixel tables like the ones above.
+for _name in ["galileo", "presto", "copernicusfm", "dofa", "croma", "softcon", "clay", "satmae", "thor", "terramind",
+              "latlon", "satclip", "mind"]:
+    INPUTS[_name] = {"kind": "grid", "builder": "tools.planteur_embed"}
+for _name in ["s2-harmonic", "biophys"]:
+    INPUTS[_name] = {"kind": "dense", "builder": "tools.planteur_embed"}
+SHIPPED = [k for k, v in INPUTS.items() if v["kind"] in ("s2", "emb")]
 
 
 def sha256(path):
