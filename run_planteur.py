@@ -143,6 +143,9 @@ class SklearnHead:
         self.pipe = Pipeline(steps)
 
     def fit(self, x, y):
+        if "pca" in self.pipe.named_steps:  # PCA can't keep more components than rows (only tiny smoke sets)
+            pca = self.pipe.named_steps["pca"]
+            pca.set_params(n_components=min(pca.n_components, len(x)))
         self.pipe.fit(x, y)
         return self
 
