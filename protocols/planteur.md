@@ -434,9 +434,34 @@ islands are in). [`tools/publish_results.sh`](../tools/publish_results.sh) colle
 dashboard's PLANTEUR view shows the default test beside the LOIO mean, the per-island table, and the paper's
 numbers for the same rows.
 
-### 6.4 First results
+### 6.4 First results (sweep `pa1`, 2026-11-10)
 
-Filled in as `pa1` finishes; see the dashboard for the live table.
+Test mIoU-8 (%), default split / LOIO mean of the five islands, against the paper's numbers (section 4). The
+probe ran on CPU (6.2).
+
+| Input | Probe | Paper probe | LightGBM |
+|---|---|---|---|
+| All Background | 10.07 / 10.49 | 10.07 / 10.49 | |
+| AlphaEarth (AEF) | 31.40 / 16.92 | 27.68 / 15.78 | 33.29 / 17.47 |
+| Tessera v1 | 32.93 / 19.24 | 33.13 / – | 33.77 / 18.82 |
+| Tessera v1.1 | 33.30 / 19.70 | 32.78 / – | 34.01 / 18.24 |
+| Tessera v2 | 35.16 / 19.10 | 34.20 / 18.91 | 34.20 / 18.36 |
+| OlmoEarth v1.3 (128-d) | 34.58 / 20.64 | 36.88 / 24.13 | 35.10 / 20.27 |
+| S2 monthly (raw bands) | 16.63 / 11.48 | – | 25.41 / 11.87 |
+
+- The all-Background row matches the paper exactly, which checks the scoring.
+- The embedding probes land within a few points of the paper, in both directions. Tessera v2 is closest. AEF
+  scores higher on the default split, and OlmoEarth lower, especially on LOIO.
+- LightGBM on at most 256 pixels per patch matches or beats the all-pixel probe on most inputs. It is far better
+  on raw S2 (25.4 vs 16.6), where a linear map of raw reflectance is too weak.
+- Transfer to a held-out island roughly halves mIoU-8 for every input.
+- The val-chosen learning rate sat on the edge of the paper's grid in 3 of 36 `pa1` probe runs, always at the
+  low end (1e-4). The grid stays as the paper fixes it (D4).
+- A CPU probe run took 0.35 h (median), 0.85 h at most.
+- The `pa1` rows were rerun from a clean frozen copy after the sweep-script fix (6.3). The LightGBM numbers are
+  identical to the first run's.
+
+Phase B inputs (sweep `pb1`, section 7) are on the dashboard as they finish.
 
 ---
 
