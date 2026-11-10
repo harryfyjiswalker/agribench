@@ -139,8 +139,12 @@ class Data:
             keep = set(self.feature_names)
             for part in self.parts:
                 for blk in part:
-                    blk.columns = np.array([j for j, n in enumerate(blk.names) if n in keep], dtype=int)
-                    blk.names = [n for n in blk.names if n in keep]
+                    # in the first subset's order, so every subset's columns line up (some blocks, e.g. the
+                    # s2-adm extras, list their columns in a different order per subset)
+                    pos = {n: j for j, n in enumerate(blk.names)}
+                    names = [n for n in self.feature_names if n in pos]
+                    blk.columns = np.array([pos[n] for n in names], dtype=int)
+                    blk.names = names
                 if [n for blk in part for n in blk.names] != self.feature_names:
                     raise ValueError("Shared columns are in a different order across subsets")
         self.n_features = len(self.feature_names)
@@ -350,6 +354,15 @@ def main(cfg):
             print(f"WARNING: could not write the LOCO ledger: {error}", flush=True)
 
 
+class CappedPCA(PCA):
+    """PCA whose component count is capped at what the training data allows (small label fractions can have
+    fewer training pixels than max_features)."""
+
+    def _fit(self, X):
+        self.n_components = min(int(self.n_components), X.shape[0], X.shape[1])
+        return super()._fit(X)
+
+
 def build_pipeline(head, n_features, seed):
     """impute (unless the head handles NaN) -> optional scale + PCA when the head caps its width -> estimator."""
     steps = []
@@ -358,7 +371,7 @@ def build_pipeline(head, n_features, seed):
     if head.get("impute", True) or reduce:
         steps.append(("impute", SimpleImputer(strategy="median", keep_empty_features=True)))
     if reduce:
-        steps += [("scale", StandardScaler()), ("pca", PCA(int(max_features), random_state=seed))]
+        steps += [("scale", StandardScaler()), ("pca", CappedPCA(int(max_features), random_state=seed))]
     steps.append(("model", instantiate(head.estimator)))
     return Pipeline(steps)
 
