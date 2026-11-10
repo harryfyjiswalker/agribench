@@ -47,9 +47,20 @@ def write_fold(out, common, row, field_names, field, y, p, tuning_rows):
 MODEL_CODE = ["run_yieldsat.py", "conf/yieldsat", "tools/yieldsat.py", "tools/yieldsat_results.py"]
 
 
+# Commits that touched MODEL_CODE without changing any result a run could produce before them, one per line with
+# the reason, in a file outside MODEL_CODE (so adding a commit to it doesn't itself change the model code).
+NEUTRAL_FILE = Path(__file__).with_name("yieldsat_result_neutral.txt")
+
+
+def result_neutral():
+    if not NEUTRAL_FILE.exists():
+        return set()
+    return {line.split()[0] for line in NEUTRAL_FILE.read_text().splitlines() if line.strip() and not line.startswith("#")}
+
+
 def same_model_code(commits, repo=Path(__file__).resolve().parents[1]):
-    """True if every commit has identical MODEL_CODE (needs the commits in the repo at `repo`; dirty or unknown
-    commits never match)."""
+    """True if every commit has the same MODEL_CODE, or differs only by result-neutral commits (NEUTRAL_FILE) (needs the commits
+    in the repo at `repo`; dirty or unknown commits never match)."""
     import subprocess
     commits = sorted(commits, key=str)
     if any(c is None or str(c).endswith("-dirty") for c in commits):
@@ -57,7 +68,15 @@ def same_model_code(commits, repo=Path(__file__).resolve().parents[1]):
     base = commits[0]
     for c in commits[1:]:
         r = subprocess.run(["git", "-C", str(repo), "diff", "--quiet", base, c, "--", *MODEL_CODE], capture_output=True)
-        if r.returncode != 0:  # 1 = differs; anything else (unknown commit) = can't tell, so refuse
+        if r.returncode == 0:
+            continue
+        if r.returncode != 1:  # unknown commit: can't tell, so refuse
+            return False
+        # The model code differs: fine only if every commit that changed it between the two is result-neutral.
+        log = subprocess.run(["git", "-C", str(repo), "log", "--no-merges", "--format=%H", f"{base}...{c}", "--",
+                              *MODEL_CODE], capture_output=True, text=True)
+        changed, neutral = log.stdout.split(), result_neutral()
+        if log.returncode != 0 or not changed or any(h not in neutral for h in changed):
             return False
     return True
 
