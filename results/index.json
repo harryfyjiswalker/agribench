@@ -46,5 +46,14 @@
     {
       "path": "yieldsat/phase2.csv"
     }
+  ],
+  "diagnostics": [
+    "yieldsat/diagnostics/crop1-decomp.csv",
+    "yieldsat/diagnostics/early1-decomp.csv",
+    "yieldsat/diagnostics/gpu1-decomp.csv",
+    "yieldsat/diagnostics/gpu2-decomp.csv",
+    "yieldsat/diagnostics/loco1-decomp.csv",
+    "yieldsat/diagnostics/phase1-decomp.csv",
+    "yieldsat/diagnostics/phase2-decomp.csv"
   ]
 }
