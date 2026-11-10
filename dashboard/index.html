@@ -87,8 +87,8 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
         <option value="labels">Label efficiency</option>
         <option value="decomp">What kind of error?</option>
       </select></label>
-      <label class="ys">Scheme <select id="f-scheme"></select></label>
-      <label class="ys">Metric <select id="f-metric">
+      <label class="ys" data-for="main early decomp">Scheme <select id="f-scheme"></select></label>
+      <label class="ys" data-for="main early labels">Metric <select id="f-metric">
         <option value="pooled_field_r2">Field R², pooled over folds (higher is better)</option>
         <option value="field_r2">Field R², mean of folds (higher is better)</option>
         <option value="field_rmse">Field RMSE, t/ha, mean of folds (lower is better)</option>
@@ -96,7 +96,7 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
         <option value="pixel_r2">Pixel R², mean of folds (higher is better)</option>
         <option value="pixel_rmse">Pixel RMSE, t/ha, mean of folds (lower is better)</option>
       </select></label>
-      <label class="ys">Head <span class="ys-hint">(table, labels, error)</span><select id="f-model"></select></label>
+      <label class="ys" data-for="main labels decomp">Head <select id="f-model"></select></label>
     </div>
   </section>
 
@@ -251,8 +251,14 @@ function render() {
   const ds = val("f-dataset"), scheme = val("f-scheme"), metric = val("f-metric");
   const es = ds === "earthshift";
   const view = val("f-view");
-  document.querySelectorAll(".ys").forEach(el => el.classList.toggle("hidden", es || (el.dataset.view && el.dataset.view !== view)));
+  // The error view needs held-out groups: random folds have none, so switch to leave one year out.
+  if (!es && view === "decomp" && scheme === "cv10") {
+    document.getElementById("f-scheme").value = "loyo"; defaultMetric(); return render();
+  }
+  document.querySelectorAll(".ys").forEach(el => el.classList.toggle("hidden", Boolean(es || (el.dataset.view && el.dataset.view !== view))));
   document.querySelectorAll(".es").forEach(el => el.classList.toggle("hidden", !es));
+  // Controls that do nothing in the current view are hidden (e.g. Head on the early-season view).
+  document.querySelectorAll("[data-for]").forEach(el => el.classList.toggle("hidden", Boolean(es || !el.dataset.for.split(" ").includes(view))));
   if (es) return renderEarthShift(ROWS.filter(r => r.dataset === "earthshift" && r.test_set === val("f-testset")));
   if (!es && view === "early") return renderEarly(scheme, metric);
   if (!es && view === "labels") return renderLabels(metric);
@@ -287,7 +293,7 @@ function renderChart(rows, metric) {
     `<span><svg width="14" height="14">${marker(SHAPES[k], 7, 7, 5, `var(--series-${k + 1})`)}</svg>${HEAD_LABEL[h] || h}</span>`).join("") +
     (pts.some(p => !p.complete) ? `<span><svg width="14" height="14">${marker("circle", 7, 7, 4.5, "var(--text-secondary)", false, true)}</svg>Hollow: not all ${allSubsets.length} subsets yet</span>` : "");
   if (!pts.length) { svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">No results for this selection yet.</text>`; return; }
-  const W = Math.max(svg.parentElement.clientWidth, 520), L = 220, R = 24, T = 28, rowH = 34, H = T + inputs.length * rowH + 8;
+  const W = Math.max(svg.parentElement.clientWidth, 520), L = labelWidth(inputs.map(label)), R = 24, T = 28, rowH = 34, H = T + inputs.length * rowH + 8;
   svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   let lo = Math.min(...pts.map(p => p.v)), hi = Math.max(...pts.map(p => p.v));
   const R2_FLOOR = -1;  // R² below this is drawn at the left edge (value in the tooltip), so one outlier can't squash the axis
@@ -418,7 +424,7 @@ function renderDecomp(scheme) {
       groups: rs.length, subsets: new Set(rs.map(r => r.subset)).size};
   });
   items.sort((a, b) => ((b.subsets >= need) - (a.subsets >= need)) || (b.r2 - a.r2));
-  const W = Math.max(svg.parentElement.clientWidth, 520), L = 200, R = 150, T = 8, rowH = 28, H = T + items.length * rowH + 8;
+  const W = Math.max(svg.parentElement.clientWidth, 520), L = labelWidth(items.map(it => label(it.input) + (it.subsets < need ? " (9/9)" : ""))), R = 150, T = 8, rowH = 28, H = T + items.length * rowH + 8;
   svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   const bw = W - L - R; let g = "";
   items.forEach((it, k) => {
@@ -483,6 +489,12 @@ function marker(shape, cx, cy, r, color, ring, hollow) {
   if (shape === "triangle") return `<polygon points="${cx},${cy - r * 1.2} ${cx + r * 1.15},${cy + r * 0.9} ${cx - r * 1.15},${cy + r * 0.9}" fill="${color}" ${s}/>`;
   return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" ${s}/>`;
 }
+// Width of the left label column: enough for the longest label (12px text), within limits.
+function labelWidth(labels) {
+  const ctx = labelWidth.ctx || (labelWidth.ctx = document.createElement("canvas").getContext("2d"));
+  ctx.font = `12px ${getComputedStyle(document.body).fontFamily}`;
+  return Math.min(340, Math.max(120, 24 + Math.max(0, ...labels.map(t => ctx.measureText(t).width))));
+}
 function niceTicks(lo, hi, n) {
   const step0 = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
   const step = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= step0);
@@ -506,7 +518,7 @@ function renderTable(rows, metric) {
   const dir = sort.key === "input" ? 1 : (lowerBetter(metric) ? -sort.dir : sort.dir);
   data.sort((a, b) => { const x = key(a), y = key(b);
     if (typeof x === "string") return x.localeCompare(y) * sort.dir;
-    if (x == null || isNaN(x)) return 1; if (y == null || isNaN(y)) return -1; return (y - x) * dir; });
+    if (x == null || isNaN(x)) return 1; if (y == null || isNaN(y)) return -1; return (x - y) * dir; });  // ▾ = best first
   const cols = ["input", ...subsets, "mean"];
   const arrow = c => sort.key === c ? ` <span class="arrow">${sort.dir === -1 ? "▾" : "▴"}</span>` : "";
   let h = `<thead><tr>${cols.map(c => `<th class="${c === "input" ? "l" : ""}" data-key="${c}">${c === "input" ? "Input" : c === "mean" ? "Mean" : c}${arrow(c)}</th>`).join("")}</tr></thead><tbody>`;
