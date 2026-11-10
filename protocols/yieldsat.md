@@ -244,6 +244,9 @@ can swing widely or go negative. The paper shows this too (e.g. ±5.28).
 | `dofa` | DOFA ViT-B/16, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, wavelength-conditioned MAE |
 | `croma` | CROMA base optical encoder, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, radar-optical contrastive + MAE |
 | `softcon` | SoftCon ViT-B/14, 768-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, soft contrastive (DINOv2 init) |
+| `terramind` | TerraMind-1.0-base, 768-d, S2 + DEM tokens of the peak-greenness date, averaged per position | AgriBench: image FM, multimodal generative (any-to-any), extra modality DEM |
+| `clay` | Clay v1.5 ViT-L/8, 1024-d, patch tokens of the peak-greenness S2 scene | AgriBench: image FM, MAE + DINOv2 representation loss, wavelength-conditioned |
+| `satmae` | SatMAE multispectral ViT-L/8, 1024-d, band-group tokens of the peak-greenness S2 scene, averaged per position | AgriBench: image FM, MAE with grouped-band masking |
 | combinations | blocks joined with `+`, e.g. `galileo+mind`, `s2+mind` | AgriBench |
 
 Tabular heads get each pixel as a flat vector (24 × bands). The static bands are taken once instead of 24
@@ -423,7 +426,7 @@ SHA-256 and the runner refuses a mismatch):
   mean absolute innovation (observed − forecast LAI) and the largest observed LAI. Per-field seeds make it
   reproducible.
 - **Patch (image) foundation models** (`tools/patch_embed.py`, `tools/yieldsat_patches.py`) [AgriBench]:
-  `copernicusfm/`, `dofa/`, `croma/`, `softcon/`. These models embed an image, not a pixel series. Each field's
+  `copernicusfm/`, `dofa/`, `croma/`, `softcon/`, `terramind/`, `clay/`, `satmae/`. These models embed an image, not a pixel series. Each field's
   Raw folder holds its own rasters (12-band S2 L2A GeoTIFF per acquisition, SCL, DEM) on the field's bounding box
   in UTM at 10 m, with real reflectance outside the field, and each pixel's (row, col) in `v1/<subset>-meta.npz`
   indexes that grid. So no raster is rebuilt: the model sees the field's own scene. *Date (label-free):* the
@@ -452,6 +455,22 @@ SHA-256 and the runner refuses a mismatch):
   - `softcon`: SoftCon ViT-B/14 13-band (`wangyi111/softcon@bae9097`, timm `vit_base_patch14_dinov2`); B10
     (cirrus, absent from L2A) set to its SSL4EO mean; Copernicus-Bench SoftCon scaling (mean ± 2 std to [0, 1]);
     224 px, 14 px tokens.
+  - `terramind`: TerraMind-1.0-base encoder (`ibm-esa-geospatial/TerraMind-1.0-base@fb96c70`, terratorch
+    `terramind_v1_base` at 83c3a92 in the layered env `envs/patchfm`, `tools/setup_patchfm_env.sh`). Two raw
+    modalities of the peak date: S2 L2A (12 bands) and the field's Raw DEM, each z-scored with TerraMind's v1
+    pretraining statistics; 224 px, 16 px tokens; final encoder norm, S2 and DEM tokens averaged per position
+    (terratorch `merge_method="mean"`). The only input here with an extra modality.
+  - `clay`: Clay v1.5 encoder, ViT-L/8 (`made-with-clay/Clay@70200eb` `v1.5/clay-v1.5.ckpt`, terratorch
+    `clay_v15`). 10 bands (B02–B08, B8A, B11, B12) z-scored with Clay's `sentinel-2-l2a` statistics, wavelengths
+    in µm, GSD 10 m; 256 px windows (its training size), 8 px tokens (80 m); no masking. Time encoding from the
+    scene's week of year (hour 10); lat/lon zeros (withheld). 1024-d.
+  - `satmae`: SatMAE multispectral ViT-L/8, fMoW-Sentinel pretraining (zenodo 7338613
+    `pretrain-vit-large-e199.pth`, CC BY-NC 4.0, so research use only). The encoder is re-implemented from
+    upstream `models_mae_group_channels.forward_encoder` (pinned 0b210ac) without masking. 10 bands in its
+    three groups (B02 B03 B04 B08 / B05 B06 B07 B8A / B11 B12), SentinelNormalize scaling (mean ± 2 std to
+    [0, 1], fMoW-Sentinel statistics); 96 px windows (its pretraining size), 8 px tokens; the three group tokens
+    after the final norm averaged per position. 1024-d.
+  - Not included: THOR (FM4CS/THOR-1.0). It needs the `thor_terratorch_ext` plugin, which has not been installed.
 
 ### 2.6 Hyperparameter tuning [AgriBench: the paper doesn't say]
 

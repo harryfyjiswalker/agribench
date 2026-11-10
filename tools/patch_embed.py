@@ -111,10 +111,14 @@ class Model:
     prepare: Callable               # (12, H, W) DN, NaN filled -> (C, H, W) float32 model input
     encode: Callable                # (B, C, S, S) torch tensor on device, list of dates -> (B, D, S/token, S/token)
     description: dict = dfield(default_factory=dict)   # model, revision, weights sha256, settings for the json
+    with_dem: bool = False          # if True, prepare gets (13, H, W): the 12 S2 bands then the field's DEM (m)
 
 
-def _load_field(f, date, prepare, size):
-    img = prepare(yp.fill_nan(f.s2(date)))
+def _load_field(f, date, prepare, size, with_dem=False):
+    img = yp.fill_nan(f.s2(date))
+    if with_dem:
+        img = np.concatenate([img, yp.fill_nan(f.dem()[None])])
+    img = prepare(img)
     wins = yp.windows(*img.shape[1:], size)
     k = yp.assign(f.row, f.col, wins, size)
     crops = np.stack([yp.crop(img, r0, c0, size) for r0, c0 in wins]).astype(np.float32)
@@ -136,11 +140,28 @@ def run(model, subset, batch_windows=32, workers=6):
     dates = load_dates(subset)
     fs = list(yp.fields(subset))
     n = fs[-1].rows.stop
+    by_start = {f.rows.start: f for f in fs}
     tmp = out_dir / f".{subset}.npy.tmp"
-    out = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float32, shape=(n, model.dim))
-    filled = np.zeros(n, bool)
+    # Plain sequential writes, not a memmap: mmap writes on a nearly full Lustre die with SIGBUS. Fields arrive in
+    # v1 order and every window of a field is encoded before the next field's, so each finished field's block is
+    # appended in order.
+    fh = open(tmp, "wb")
+    np.lib.format.write_array_header_1_0(fh, {"descr": np.lib.format.dtype_to_descr(np.dtype(np.float32)),
+                                              "fortran_order": False, "shape": (n, model.dim)})
+    blocks, written = {}, 0          # field index -> (rows x D buffer, filled mask); rows written so far
     t0, n_windows = time.time(), 0
     pending = []  # (field, date, window index, crop) waiting for a batch
+
+    def write_done(upto):
+        """Append the buffers of all fields before position `upto` in v1 order."""
+        nonlocal written
+        while written < upto:
+            f = by_start[written]
+            buf, ok = blocks.pop(f.index)
+            if not ok.all():
+                raise RuntimeError(f"{f.name}: {(~ok).sum()} pixels got no embedding")
+            fh.write(buf.astype(np.float32).tobytes())
+            written = f.rows.stop
 
     def flush():
         nonlocal pending, n_windows
@@ -155,29 +176,31 @@ def run(model, subset, batch_windows=32, workers=6):
         if not torch.isfinite(tok).all():
             raise RuntimeError("non-finite tokens")
         for (f, _, (r0, c0, sel), _), t in zip(pending, tok):
-            rows = np.arange(f.rows.start, f.rows.stop)[sel]
-            out[rows] = yp.sample_tokens(t, f.row[sel], f.col[sel], r0, c0, model.size)
-            filled[rows] = True
+            buf, ok = blocks[f.index]
+            buf[sel] = yp.sample_tokens(t, f.row[sel], f.col[sel], r0, c0, model.size)
+            ok[sel] = True
         n_windows += len(pending)
         pending = []
 
     with ThreadPoolExecutor(workers) as pool:
         jobs = pool.map(lambda f: _load_field(f, dt.date.fromisoformat(dates["fields"][f.name]["peak"]),
-                                              model.prepare, model.size), fs)
+                                              model.prepare, model.size, model.with_dem), fs)
         for i, (f, date, wins, k, crops) in enumerate(jobs):
+            blocks[f.index] = (np.empty((len(f.row), model.dim), np.float32), np.zeros(len(f.row), bool))
             for j, (r0, c0) in enumerate(wins):
                 sel = k == j
                 if sel.any():
                     pending.append((f, date, (r0, c0, sel), crops[j]))
                 if len(pending) >= batch_windows:
                     flush()
+                    write_done(pending[0][0].rows.start if pending else f.rows.start)
             if i % 50 == 0:
                 print(f"{i}/{len(fs)} fields, {n_windows} windows, {time.time() - t0:.0f}s", flush=True)
         flush()
-    out.flush()
-    del out
-    if not filled.all():
-        raise RuntimeError(f"{(~filled).sum()} pixels got no embedding")
+    write_done(n)
+    fh.close()
+    if tmp.stat().st_size != np.load(tmp, mmap_mode="r").offset + n * model.dim * 4:
+        raise RuntimeError(f"{tmp}: wrong size")
     tmp.rename(target)
     info = {"subset": subset, "kind": "dense", "rows": int(n),
             "feature_names": [f"{model.name}_{i:04d}" for i in range(model.dim)],
