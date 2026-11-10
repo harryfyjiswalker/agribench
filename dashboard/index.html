@@ -9,7 +9,7 @@
   color-scheme: light;
   --surface-0: #f4f4f2; --surface-1: #fcfcfb; --border: #e2e1dc; --grid: #ecebe7;
   --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #85847f;
-  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #8a5cd6;
   --seq-0: #f1f6fd; --seq-1: #cde2fb; --seq-2: #9ec5f4; --seq-3: #6da7ec; --seq-4: #3987e5; --seq-5: #256abf; --seq-6: #184f95;
   --accent: #2a78d6;
 }
@@ -18,7 +18,7 @@
     color-scheme: dark;
     --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
     --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
-    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #9b74e8;
     --seq-0: #1d2633; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #184f95; --seq-4: #256abf; --seq-5: #3987e5; --seq-6: #6da7ec;
     --accent: #3987e5;
   }
@@ -27,7 +27,7 @@
   color-scheme: dark;
   --surface-0: #121211; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
   --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
-  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #9b74e8;
   --seq-0: #1d2633; --seq-1: #0d366b; --seq-2: #104281; --seq-3: #184f95; --seq-4: #256abf; --seq-5: #3987e5; --seq-6: #6da7ec;
   --accent: #3987e5;
 }
@@ -83,11 +83,11 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
       <label class="es hidden">Test set <select id="f-testset"></select></label>
       <label class="ys">View <select id="f-view">
         <option value="main">Compare representations</option>
-        <option value="early">Early season</option>
+        <option value="rank">Ranking capability</option>
         <option value="labels">Label efficiency</option>
-        <option value="decomp">What kind of error?</option>
+        <option value="early">Early season</option>
       </select></label>
-      <label class="ys" data-for="main early decomp">Scheme <select id="f-scheme"></select></label>
+      <label class="ys" data-for="main rank labels early">Scheme <select id="f-scheme"></select></label>
       <label class="ys" data-for="main early labels">Metric <select id="f-metric">
         <option value="pooled_field_r2">Field R², pooled over folds (higher is better)</option>
         <option value="field_r2">Field R², mean of folds (higher is better)</option>
@@ -96,7 +96,7 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
         <option value="pixel_r2">Pixel R², mean of folds (higher is better)</option>
         <option value="pixel_rmse">Pixel RMSE, t/ha, mean of folds (lower is better)</option>
       </select></label>
-      <label class="ys" data-for="main labels decomp">Head <select id="f-model"></select></label>
+      <label class="ys" data-for="main labels">Head <select id="f-model"></select></label>
     </div>
   </section>
 
@@ -115,6 +115,27 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
     <div class="table-wrap"><table id="table"></table></div>
   </section>
 
+  <section class="card ys hidden" data-view="rank">
+    <h2>Which representation ranks fields best in an unseen year, region or country?</h2>
+    <p class="note">The correlation between predicted and observed field yield <i>within</i> each held-out year (leave one
+      year out), region or country: how well a model puts the fields in the right order, whatever it gets wrong about the
+      overall level, which no imagery-only model can know for a new year. Each point is the median over held-out groups
+      with at least 10 fields, then the mean over subsets (crops for leave one country out); hollow points don't cover
+      every subset yet, and only complete results set the order. 1 = perfect order, 0 = no better than random.</p>
+    <div class="legend" id="rank-legend"></div>
+    <div class="chart-wrap"><svg id="rank-chart" role="img" aria-label="Within-group correlation by input and head"></svg></div>
+  </section>
+
+  <section class="card ys hidden" data-view="labels">
+    <h2>How many labelled fields does each representation need?</h2>
+    <p class="note">Each line is one input with the selected head, trained on a random fraction of each fold's training
+      fields (3 seeds; the test fields are unchanged). Each point is the mean over seeds, then over subsets; hollow points
+      don't cover every subset and seed yet. Choose the scheme above (for leave one country out, the subsets are crops). A
+      representation whose line is flat needs fewer labels.</p>
+    <div class="legend" id="labels-legend"></div>
+    <div class="chart-wrap"><svg id="labels-chart" role="img" aria-label="Score by fraction of training fields"></svg></div>
+  </section>
+
   <section class="card ys hidden" data-view="early">
     <h2>How early in the season can yield be predicted?</h2>
     <p class="note">Each line is one input and head, using only imagery up to the given number of days after sowing; "full"
@@ -122,26 +143,6 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
       Only inputs indexed by days after sowing can be cut this way (S2 aligned and SNAP).</p>
     <div class="legend" id="early-legend"></div>
     <div class="chart-wrap"><svg id="early-chart" role="img" aria-label="Score by days after sowing"></svg></div>
-  </section>
-
-  <section class="card ys hidden" data-view="labels">
-    <h2>How many labelled fields does each representation need?</h2>
-    <p class="note">Each line is one input with the selected head, trained on a random fraction of each fold's training
-      fields (3 seeds; the test fields are unchanged). Each point is the mean over seeds, then over subsets; hollow points
-      don't cover every subset and seed yet. Random 10-fold only. A representation whose line is flat needs fewer labels.</p>
-    <div class="legend" id="labels-legend"></div>
-    <div class="chart-wrap"><svg id="labels-chart" role="img" aria-label="Score by fraction of training fields"></svg></div>
-  </section>
-
-  <section class="card ys hidden" data-view="decomp">
-    <h2>What kind of error?</h2>
-    <p class="note" id="decomp-note">For each held-out year, region or country, the error (1 − R²) is split into three parts
-      (Kobayashi &amp; Salam): <b>level bias</b> (the group's mean yield is missed), <b>spread</b> (predictions too compressed
-      or too spread out) and <b>ranking</b> (fields put in the wrong order). Bars show the median share over held-out groups
-      with at least 10 fields, for the selected head. The numbers are the median R² within a group, and the same after
-      removing the group's mean bias (a diagnostic, not a score: the mean of a new year isn't known in advance).</p>
-    <div class="legend" id="decomp-legend"></div>
-    <div class="chart-wrap"><svg id="decomp-chart" role="img" aria-label="Error shares by input"></svg></div>
   </section>
 
   <section class="card es hidden">
@@ -172,7 +173,7 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
 const HEAD_ORDER = ["probe", "lightgbm", "tabpfn", "tabicl", "rf", "xgboost", "extra_trees", "mean"];
 const HEAD_LABEL = {probe: "Probe", lightgbm: "LightGBM", tabpfn: "TabPFN", tabicl: "TabICL", rf: "Random forest",
   xgboost: "XGBoost", extra_trees: "Extra trees", mean: "Mean baseline"};
-const SHAPES = ["circle", "square", "diamond", "triangle"];
+const SHAPES = ["circle", "square", "diamond", "triangle", "circle"];
 const SCHEME_LABEL = {cv10: "Random 10-fold (grouped by field)", loyo: "Leave one year out", loro: "Leave one region out", loco: "Leave one country out"};
 const INPUT_LABEL = {s2: "S2", "s2-adm": "S2 (ancillary)", latlon: "Lat/lon", mind: "MIND", satclip: "SatCLIP",
   "s2-aligned": "S2 (aligned)", "s2-gdd": "S2 (thermal)", "s2-harmonic": "S2 (harmonic)", biophys: "SNAP", arc: "ARC", arcvae: "ARC-VAE",
@@ -208,11 +209,11 @@ async function load() {
   const v = "?v=" + encodeURIComponent(index.updated);
   const grab = path => fetch(root + path + v).then(r => r.ok ? r.text() : "").then(t => t ? parseCSV(t) : []).catch(() => []);
   for (const rows of await Promise.all(index.files.map(f => grab(f.path)))) ROWS.push(...rows);
-  // The error-decomposition tables are only needed by that view: load them in the background.
+  // The diagnostics tables are only needed by the ranking view: load them in the background.
   DECOMP_READY = Promise.all((index.diagnostics || []).map(grab)).then(parts => {
     for (const rows of parts) DECOMP.push(...rows);
     DECOMP_LOADED = true;
-    if (val("f-view") === "decomp") render();
+    if (val("f-view") === "rank") render();
   });
   document.getElementById("meta").textContent =
     `${ROWS.length} result rows · updated ${index.updated} · sweeps: ${[...new Set(ROWS.map(r => r.sweep).filter(Boolean))].join(", ")}`;
@@ -251,8 +252,8 @@ function render() {
   const ds = val("f-dataset"), scheme = val("f-scheme"), metric = val("f-metric");
   const es = ds === "earthshift";
   const view = val("f-view");
-  // The error view needs held-out groups: random folds have none, so switch to leave one year out.
-  if (!es && view === "decomp" && scheme === "cv10") {
+  // The ranking view needs held-out groups: random folds have none, so switch to leave one year out.
+  if (!es && view === "rank" && scheme === "cv10") {
     document.getElementById("f-scheme").value = "loyo"; defaultMetric(); return render();
   }
   document.querySelectorAll(".ys").forEach(el => el.classList.toggle("hidden", Boolean(es || (el.dataset.view && el.dataset.view !== view))));
@@ -261,8 +262,8 @@ function render() {
   document.querySelectorAll("[data-for]").forEach(el => el.classList.toggle("hidden", Boolean(es || !el.dataset.for.split(" ").includes(view))));
   if (es) return renderEarthShift(ROWS.filter(r => r.dataset === "earthshift" && r.test_set === val("f-testset")));
   if (!es && view === "early") return renderEarly(scheme, metric);
-  if (!es && view === "labels") return renderLabels(metric);
-  if (!es && view === "decomp") return renderDecomp(scheme);
+  if (!es && view === "labels") return renderLabels(scheme, metric);
+  if (!es && view === "rank") return renderRank(scheme);
   // Early-season and label-efficiency variants (input "s2-aligned@d060") are not mixed into the main comparison.
   const rows = ROWS.filter(r => r.dataset === ds && r.scheme === scheme && !String(r.input).includes("@"));
   document.getElementById("metric-note").textContent = metric.endsWith("r2") && scheme !== "cv10" ? POOLED_NOTE : "";
@@ -271,12 +272,12 @@ function render() {
   renderTable(rows.filter(r => r.model === val("f-model")), metric);
 }
 
-function renderChart(rows, metric) {
-  const svg = document.getElementById("chart");
+function renderChart(rows, metric, o = {}) {
+  const svg = document.getElementById(o.svg || "chart");
   const heads = HEAD_ORDER.filter(m => m !== "mean" && rows.some(r => r.model === m)).slice(0, 4);
   const inputs = [...new Set(rows.map(r => r.input))];
   // Each head is averaged over every subset it has finished for that input; a hollow marker means not all yet.
-  const allSubsets = [...new Set(rows.map(r => r.subset))].sort();
+  const allSubsets = o.subsets || [...new Set(rows.map(r => r.subset))].sort();
   const pts = [];
   for (const i of inputs) for (const h of heads) {
     const rs = rows.filter(r => r.input === i && r.model === h && get(r, metric) != null && !isNaN(get(r, metric)));
@@ -289,7 +290,7 @@ function renderChart(rows, metric) {
     return ps.length ? (lowerBetter(metric) ? -Math.min(...ps) : Math.max(...ps)) : -Infinity; };
   const ranked = i => best(i, true) > -Infinity;
   inputs.sort((a, b) => (ranked(b) - ranked(a)) || (ranked(a) ? best(b, true) - best(a, true) : best(b, false) - best(a, false)));
-  document.getElementById("legend").innerHTML = heads.map((h, k) =>
+  document.getElementById(o.legend || "legend").innerHTML = heads.map((h, k) =>
     `<span><svg width="14" height="14">${marker(SHAPES[k], 7, 7, 5, `var(--series-${k + 1})`)}</svg>${HEAD_LABEL[h] || h}</span>`).join("") +
     (pts.some(p => !p.complete) ? `<span><svg width="14" height="14">${marker("circle", 7, 7, 4.5, "var(--text-secondary)", false, true)}</svg>Hollow: not all ${allSubsets.length} subsets yet</span>` : "");
   if (!pts.length) { svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">No results for this selection yet.</text>`; return; }
@@ -297,7 +298,8 @@ function renderChart(rows, metric) {
   svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   let lo = Math.min(...pts.map(p => p.v)), hi = Math.max(...pts.map(p => p.v));
   const R2_FLOOR = -1;  // R² below this is drawn at the left edge (value in the tooltip), so one outlier can't squash the axis
-  if (metric.endsWith("r2")) { lo = Math.max(R2_FLOOR, Math.min(0, lo)); hi = Math.max(hi, 0.2); } else { lo = 0; }
+  if (metric.endsWith("r2") || metric === "rank_r") { lo = Math.max(R2_FLOOR, Math.min(0, lo)); hi = Math.max(hi, 0.2); } else { lo = 0; }
+  if (metric === "rank_r") hi = Math.min(hi, 1);
   const pad = (hi - lo) * 0.06 || 0.1; hi += pad;
   const x = v => L + (Math.max(v, lo) - lo) / (hi - lo) * (W - L - R);
   let g = "";
@@ -311,13 +313,14 @@ function renderChart(rows, metric) {
     heads.forEach((h, k) => {
       const p = pts.find(q => q.input === i && q.head === h); if (!p) return;
       const cover = p.complete ? `all ${allSubsets.length} subsets` : `${p.n} of ${allSubsets.length} subsets (${p.subsets.join(", ")})`;
-      const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${cover}: ${fmt(metric, p.v)}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}${p.v < lo ? "<br>Below the axis: drawn at its left edge" : ""}`;
+      const tip = `<b>${label(i)}</b> · ${HEAD_LABEL[h] || h}<br>Mean over ${cover}: ${fmt(metric, p.v)}${o.extra ? o.extra(i, h) : ""}<br>Range across subsets: ${fmt(metric, p.lo)} to ${fmt(metric, p.hi)}${p.v < lo ? "<br>Below the axis: drawn at its left edge" : ""}`;
       if (p.v < lo) g += `<text x="${x(lo) + 10}" y="${y + 4}" style="fill:var(--text-muted)">◀ ${fmt(metric, p.v)}</text>`;
       g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">${marker(SHAPES[k], x(p.v), y, 5.5, `var(--series-${k + 1})`, true, !p.complete)}` +
            `<circle cx="${x(p.v)}" cy="${y}" r="12" fill="transparent"/></g>`;
     });
   });
   svg.innerHTML = g;
+  if (o.svg) return;
   document.getElementById("chart-note").textContent =
     `Mean of the per-subset scores. Each head is averaged over every subset it has finished for that input; a hollow marker means fewer than all ${allSubsets.length} subsets so far. Only filled (complete) markers set the order: inputs with no complete head yet are listed last. Hover a marker for the subsets it covers and their spread.`;
 }
@@ -325,7 +328,7 @@ function renderChart(rows, metric) {
 // series: [{name, pts: [{x, v, complete, tip}]}]; xs: tick positions; xText: tick label; log: log x axis.
 function lineChart(svgId, legendId, series, xs, xText, log, metric, xTitle) {
   const svg = document.getElementById(svgId);
-  series = series.filter(s => s.pts.length).slice(0, 4);
+  series = series.filter(s => s.pts.length).slice(0, 5);
   document.getElementById(legendId).innerHTML = series.map((s, k) =>
     `<span><svg width="22" height="14"><line x1="1" x2="21" y1="7" y2="7" stroke="var(--series-${k + 1})" stroke-width="2"/>${marker(SHAPES[k], 11, 7, 4, `var(--series-${k + 1})`)}</svg>${s.name}</span>`).join("") +
     (series.some(s => s.pts.some(p => !p.complete)) ? `<span><svg width="14" height="14">${marker("circle", 7, 7, 4.5, "var(--text-secondary)", false, true)}</svg>Hollow: incomplete</span>` : "");
@@ -380,9 +383,9 @@ function renderEarly(scheme, metric) {
   const xs = [...new Set(series.flatMap(s => s.pts.map(p => p.x)))].sort((a, b) => a - b);
   lineChart("early-chart", "early-legend", series, xs, t => t === FULL ? "full" : `+${t}`, false, metric, "days after sowing");
 }
-function renderLabels(metric) {
-  const head = val("f-model"), need = nSubsets("cv10"), SEEDS = 3;
-  const rows = ROWS.filter(r => r.dataset === "yieldsat" && r.scheme === "cv10" && r.model === head);
+function renderLabels(scheme, metric) {
+  const head = val("f-model"), need = nSubsets(scheme), SEEDS = 3;
+  const rows = ROWS.filter(r => r.dataset === "yieldsat" && r.scheme === scheme && r.model === head && !String(r.subset).includes(">"));
   const variants = rows.filter(r => String(r.input).includes("@f"));
   const series = [];
   for (const inp of [...new Set(variants.map(r => base(r.input)))]) {
@@ -404,42 +407,22 @@ function renderLabels(metric) {
   lineChart("labels-chart", "labels-legend", series, xs, t => `${Math.round(t * 100)}%`, true, metric,
     `share of training fields · ${HEAD_LABEL[head] || head}`);
 }
-// ---- Error decomposition: 100% bars of level bias / spread / ranking per input ----
+// ---- Ranking capability: within-group correlation from the error diagnostics ----
 const median = a => { const b = [...a].sort((x, y) => x - y), n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : NaN; };
-function renderDecomp(scheme) {
-  const svg = document.getElementById("decomp-chart"), head = val("f-model");
-  const PARTS = [["B_share", "Level bias", 2], ["V_share", "Spread", 4], ["A_share", "Ranking", 1]];
-  document.getElementById("decomp-legend").innerHTML = PARTS.map(([, n, k]) =>
-    `<span><svg width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="2" fill="var(--series-${k})"/></svg>${n}</span>`).join("");
+function renderRank(scheme) {
+  const svg = document.getElementById("rank-chart");
   if (!DECOMP_LOADED) { svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">Loading diagnostics…</text>`; return; }
-  const rows = DECOMP.filter(r => r.scheme === scheme && r.model === head && r.group !== "pooled" && +r.n_fields >= 10 &&
-    !String(r.input).includes("@") && r.r2 !== "" && !isNaN(r.r2));
-  if (scheme === "cv10" || !rows.length) { svg.setAttribute("height", 40);
-    svg.innerHTML = `<text x="0" y="24">${scheme === "cv10" ? "Choose leave one year, region or country out: random folds have no held-out group." : "No diagnostics for this selection yet."}</text>`; return; }
-  const need = new Set(ROWS.filter(r => r.dataset === "yieldsat" && r.scheme === scheme && !String(r.subset).includes(">")).map(r => r.subset)).size;
-  const items = [...new Set(rows.map(r => r.input))].map(i => {
-    const rs = rows.filter(r => r.input === i);
-    const sh = PARTS.map(([c]) => median(rs.map(r => +r[c]))), tot = sh.reduce((a, b) => a + b, 0) || 1;
-    return {input: i, shares: sh.map(v => v / tot), r2: median(rs.map(r => +r.r2)), r2b: median(rs.map(r => +r.r2_bias_removed)),
-      groups: rs.length, subsets: new Set(rs.map(r => r.subset)).size};
-  });
-  items.sort((a, b) => ((b.subsets >= need) - (a.subsets >= need)) || (b.r2 - a.r2));
-  const W = Math.max(svg.parentElement.clientWidth, 520), L = labelWidth(items.map(it => label(it.input) + (it.subsets < need ? " (9/9)" : ""))), R = 150, T = 8, rowH = 28, H = T + items.length * rowH + 8;
-  svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const bw = W - L - R; let g = "";
-  items.forEach((it, k) => {
-    const y = T + k * rowH, part = it.subsets < need ? ` <tspan style="fill:var(--text-muted)">(${it.subsets}/${need})</tspan>` : "";
-    g += `<text x="${L - 12}" y="${y + 17}" text-anchor="end" style="fill:var(--text-primary)">${label(it.input)}${part}</text>`;
-    let x0 = L;
-    PARTS.forEach(([, n, c], j) => {
-      const w = it.shares[j] * bw;
-      if (w > 0.5) g += `<rect class="pt" x="${x0}" y="${y + 5}" width="${Math.max(w - 2, 0.5)}" height="${rowH - 10}" rx="${j === 2 ? 4 : 0}" fill="var(--series-${c})" ` +
-        `data-tip="<b>${label(it.input)}</b> · ${HEAD_LABEL[head] || head}<br>${n}: ${Math.round(it.shares[j] * 100)}% of the error (median share)<br>Median within-group R²: ${fmt("r2", it.r2)}; without the group's mean bias: ${fmt("r2", it.r2b)}<br>${it.groups} held-out groups across ${it.subsets} of ${need} subsets"/>`;
-      x0 += w;
-    });
-    g += `<text x="${W - R + 10}" y="${y + 17}">R² ${fmt("r2", it.r2)} → ${fmt("r2", it.r2b)}</text>`;
-  });
-  svg.innerHTML = g;
+  const groups = DECOMP.filter(r => r.scheme === scheme && r.group !== "pooled" && +r.n_fields >= 10 &&
+    !String(r.input).includes("@") && r.r !== "" && !isNaN(r.r));
+  // One row per input × head × subset: the median within-group correlation over that subset's held-out groups.
+  const by = {};
+  for (const r of groups) (by[`${r.input}|${r.model}|${r.subset}`] ||= []).push(r);
+  const rows = Object.values(by).map(rs => ({input: rs[0].input, model: rs[0].model, subset: rs[0].subset,
+    rank_r_mean: median(rs.map(r => +r.r)), r2b: median(rs.map(r => +r.r2_bias_removed)), groups: rs.length}));
+  const subsets = [...new Set(ROWS.filter(r => r.dataset === "yieldsat" && r.scheme === scheme && !String(r.subset).includes(">")).map(r => r.subset))].sort();
+  const extra = (i, h) => { const rs = rows.filter(r => r.input === i && r.model === h);
+    return `<br>${rs.reduce((a, r) => a + r.groups, 0)} held-out groups; median R² without the group's mean bias: ${fmt("r2", mean(rs.map(r => r.r2b)))}`; };
+  renderChart(rows, "rank_r", {svg: "rank-chart", legend: "rank-legend", subsets, extra});
 }
 function renderEarthShift(rows) {
   const svg = document.getElementById("es-chart"), t = document.getElementById("es-table");
