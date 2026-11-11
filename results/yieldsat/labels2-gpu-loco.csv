@@ -1,0 +1,4 @@
+dataset,subset,scheme,input,model,folds,n_features,pixel_cap,season_cutoff,train_fraction,seed,pixel_r2_mean,pixel_r2_std,pixel_rmse_mean,pixel_rmse_std,field_r2_mean,field_r2_std,field_rmse_mean,field_rmse_std,pooled_pixel_r2,pooled_pixel_rmse,pooled_field_r2,pooled_field_rmse,task_hours,git_commit,sweep
+yieldsat,corn,loco,s2-aligned,tabpfn,2,204,32,,0.05,0,-0.2727,0.4351,3.7517,1.112,-0.6451,0.8171,3.0066,1.3969,-0.3539,4.1118,-0.8179,3.5845,0.107,fc11fdc50d,labels2-gpu-loco
+yieldsat,corn>Argentina,loco,s2-aligned,tabpfn,1,204,32,,0.05,0,-0.7078,0.0,4.8637,0.0,-1.4622,0.0,4.4035,0.0,-0.7078,4.8637,-1.4622,4.4035,0.063,fc11fdc50d,labels2-gpu-loco
+yieldsat,corn>Brazil,loco,s2-aligned,tabpfn,1,204,32,,0.05,0,0.1624,0.0,2.6397,0.0,0.172,0.0,1.6098,0.0,0.1624,2.6397,0.172,1.6098,0.044,fc11fdc50d,labels2-gpu-loco

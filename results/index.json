@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-11 10:25 CET",
+  "updated": "2026-11-11 11:10 CET",
   "files": [
     {
       "path": "earthshift/final.csv"
@@ -44,6 +44,9 @@
       "path": "yieldsat/labels1.csv"
     },
     {
+      "path": "yieldsat/labels2-gpu-loco.csv"
+    },
+    {
       "path": "yieldsat/labels2-loco.csv"
     },
     {
@@ -79,7 +82,10 @@
     "yieldsat/diagnostics/gpu1-decomp.csv",
     "yieldsat/diagnostics/gpu2-decomp.csv",
     "yieldsat/diagnostics/labels2-decomp.csv",
+    "yieldsat/diagnostics/labels2-gpu-loco-decomp.csv",
     "yieldsat/diagnostics/labels2-loco-decomp.csv",
+    "yieldsat/diagnostics/labels3-loco-decomp.csv",
+    "yieldsat/diagnostics/labels3-loyo-decomp.csv",
     "yieldsat/diagnostics/loco1-decomp.csv",
     "yieldsat/diagnostics/loco1-gpu-decomp.csv",
     "yieldsat/diagnostics/loco2-decomp.csv",
@@ -100,7 +106,10 @@
     "yieldsat/diagnostics/labels1-ci.csv",
     "yieldsat/diagnostics/labels1-gpu-ci.csv",
     "yieldsat/diagnostics/labels2-ci.csv",
+    "yieldsat/diagnostics/labels2-gpu-loco-ci.csv",
     "yieldsat/diagnostics/labels2-loco-ci.csv",
+    "yieldsat/diagnostics/labels3-loco-ci.csv",
+    "yieldsat/diagnostics/labels3-loyo-ci.csv",
     "yieldsat/diagnostics/loco1-ci.csv",
     "yieldsat/diagnostics/loco1-gpu-ci.csv",
     "yieldsat/diagnostics/loco2-ci.csv",

@@ -1,0 +1,3 @@
+subset,scheme,input,model,field_r2,field_r2_lo,field_r2_hi,field_rmse,field_rmse_lo,field_rmse_hi
+corn,loco,s2-aligned@f0.05-s0,tabpfn,-0.8179,-1.1289,-0.5736,3.5845,3.2865,3.8645
+corn,loco,s2-aligned@f0.05-s1,tabpfn,-0.8007,-1.0707,-0.5853,3.5675,3.3142,3.8183
