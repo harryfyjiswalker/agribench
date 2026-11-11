@@ -149,6 +149,8 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
       representation whose line is flat needs fewer labels.</p>
     <div class="legend" id="labels-legend"></div>
     <div class="chart-wrap"><svg id="labels-chart" role="img" aria-label="Score by fraction of training fields"></svg></div>
+    <p class="note" id="labels-note"></p>
+    <div class="table-wrap"><table id="labels-table"></table></div>
   </section>
 
   <section class="card ys hidden" data-view="early">
@@ -497,9 +499,21 @@ function renderLabels(scheme, metric) {
     if (full.length) pts.push(point(full, metric, 1, need, name, "all training fields"));
     series.push({name, pts});
   }
+  // Best first, by the mean of a line's points; the chart draws the best five, the table lists every input.
+  const sign = lowerBetter(metric) ? 1 : -1;
+  for (const s of series) s.order = sign * mean(s.pts.map(p => p.v));
+  series.sort((a, b) => a.order - b.order);
   const xs = [...new Set(series.flatMap(s => s.pts.map(p => p.x)))].sort((a, b) => a - b);
   lineChart("labels-chart", "labels-legend", series, xs, t => `${Math.round(t * 100)}%`, true, metric,
     `share of training fields · ${HEAD_LABEL[head] || head}`);
+  document.getElementById("labels-note").textContent = series.length > 5 ?
+    `The chart shows the best 5 of ${series.length} inputs (by the mean over all points); the table lists them all, best first.` : "";
+  const pct = t => t === 1 ? "all" : `${Math.round(t * 100)}%`;
+  const cell = s => x => { const p = s.pts.find(q => q.x === x);
+    return `<td${p ? ` title="${p.tip.replace(/<[^>]+>/g, " ").replace(/"/g, "&quot;")}"` : ""}>${p ? (p.complete ? "" : "(") + fmt(metric, p.v) + (p.complete ? "" : ")") : "–"}</td>`; };
+  document.getElementById("labels-table").innerHTML = series.length ?
+    `<thead><tr><th class="l">Input</th>${xs.map(x => `<th>${pct(x)}</th>`).join("")}</tr></thead><tbody>` +
+    series.map(s => `<tr><td class="l">${s.name}</td>${xs.map(cell(s)).join("")}</tr>`).join("") + "</tbody>" : "";
 }
 // ---- Ranking capability: within-group correlation from the error diagnostics ----
 const median = a => { const b = [...a].sort((x, y) => x - y), n = b.length; return n ? (n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2) : NaN; };
