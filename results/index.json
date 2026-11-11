@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-10 22:59 CET",
+  "updated": "2026-11-11 10:25 CET",
   "files": [
     {
       "path": "earthshift/final.csv"
@@ -24,6 +24,9 @@
     },
     {
       "path": "yieldsat/fm1.csv"
+    },
+    {
+      "path": "yieldsat/fm2-gpu.csv"
     },
     {
       "path": "yieldsat/fm2.csv"
@@ -72,6 +75,7 @@
     "yieldsat/diagnostics/fm1-decomp.csv",
     "yieldsat/diagnostics/fm1-gpu-decomp.csv",
     "yieldsat/diagnostics/fm2-decomp.csv",
+    "yieldsat/diagnostics/fm2-gpu-decomp.csv",
     "yieldsat/diagnostics/gpu1-decomp.csv",
     "yieldsat/diagnostics/gpu2-decomp.csv",
     "yieldsat/diagnostics/labels2-decomp.csv",
@@ -90,6 +94,7 @@
     "yieldsat/diagnostics/fm1-ci.csv",
     "yieldsat/diagnostics/fm1-gpu-ci.csv",
     "yieldsat/diagnostics/fm2-ci.csv",
+    "yieldsat/diagnostics/fm2-gpu-ci.csv",
     "yieldsat/diagnostics/gpu1-ci.csv",
     "yieldsat/diagnostics/gpu2-ci.csv",
     "yieldsat/diagnostics/labels1-ci.csv",
