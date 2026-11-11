@@ -53,6 +53,9 @@
       "path": "yieldsat/labels2.csv"
     },
     {
+      "path": "yieldsat/labels3-loco.csv"
+    },
+    {
       "path": "yieldsat/loco1-gpu.csv"
     },
     {
