@@ -1,5 +1,7 @@
 # AgriBench
 
+AgriBench compares frozen representations of satellite and agronomic data on agricultural tasks. You choose:
+
 - a **dataset** (a task, such as yield prediction or crop classification);
 - an **input**: what the model sees for each pixel. This can be raw Sentinel-2 data, a location encoder's
   embedding, or a geospatial foundation model's embedding;
@@ -20,17 +22,17 @@ environments, so results from different people can be compared directly.
 - [PLANTEUR: crop classification](#planteur-crop-classification)
 - [Results and the dashboard](#results-and-the-dashboard)
 - [Where things live on Anunna](#where-things-live-on-anunna)
-- [Adding an input or a head](#adding-an-input-or-a-head)
 - [Python environment](#python-environment)
 - [Working with an AI agent](#working-with-an-ai-agent)
+- [Add your own model: step by step](#add-your-own-model-step-by-step)
 
 ## Tasks at a glance
 
-| Task | Dataset | What it tests | Main score | Status (2026-11-09) |
+| Task | Dataset | What it tests | Main score | Status (2026-11-11) |
 |---|---|---|---|---|
-| Yield prediction | [YieldSAT](https://yieldsat.github.io/) | predicting 10 m yield maps in four countries, including in unseen years and regions | R² and RMSE (t/ha), per field and per pixel | **Running.** Runner, sweeps and 8 inputs ready; first sweep under way |
-| Field delineation | [EarthShift](https://earthshift.github.io/) | finding field boundaries in a new country or a new season | mIoU, in and out of distribution | **First results.** ResNet-50 and Galileo Base, frozen and full, 5 seeds |
-| Crop classification | [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) | classifying crops on tropical islands, including an island never seen in training | mIoU over 8 classes | **Protocol agreed.** Data downloading; runner not written yet |
+| Yield prediction | [YieldSAT](https://yieldsat.github.io/) | predicting 10 m yield maps in four countries, including in unseen years, regions and countries | R² and RMSE (t/ha), per field and per pixel | **Running.** 30 inputs × 5 heads × 4 split schemes; CPU heads done, GPU heads (TabPFN, TabICL) catching up; label efficiency and early season under way |
+| Field delineation | [EarthShift](https://earthshift.github.io/) | finding field boundaries in a new country or a new season | mIoU, in and out of distribution | **First results.** ResNet-50 and Galileo Base, frozen and full, 5 seeds; a CPU route for frozen backbones is being validated |
+| Crop classification | [PLANTEUR](https://huggingface.co/datasets/allenai/planteur-benchmark) | classifying crops on tropical islands, including an island never seen in training | mIoU over 8 classes | **Running.** The 6 shipped inputs are done for every CPU head; 18 inputs built by AgriBench are finishing; GPU heads queued |
 | Phenology | – | – | – | Not started |
 
 Each task has a protocol in [`protocols/`](protocols/).
@@ -112,7 +114,7 @@ All inputs are pre-computed on Anunna, with one row per 10 m pixel.
 
 A location encoder gives a pixel the same embedding every year, so on its own it can't follow year-to-year
 changes in yield. It is meant to be combined with an input that changes over time, such as `s2+mind`. How each
-input was built and checked is in protocol section 2.5.
+input was built and checked is in protocol section 2.5. To add your own model as an input, follow [Add your own model](#add-your-own-model-step-by-step).
 
 ### Heads
 
@@ -167,32 +169,42 @@ and `--subsets` or `--schemes` to narrow it. The sweep tool:
 
 ## EarthShift: field delineation under shift
 
-**The task.** Find field boundaries in 4-band (RGB + near-infrared) Sentinel-2 image chips of 256 × 256 pixels.
-Each pixel is labelled field, boundary or background, and models are scored with mIoU. The point of EarthShift
-is **distribution shift**: each task trains in one setting and tests both in that setting (in distribution, ID)
-and in a different one (out of distribution, OOD). The gap between the two is what the benchmark measures.
+**The task.** Find field boundaries in 4-band (red, green, blue, near-infrared) Sentinel-2 chips of 256 × 256
+pixels. Every pixel is labelled field, boundary or background, and the score is mIoU over the three classes.
+EarthShift is about **distribution shift**: each task trains in one setting and is tested both in that setting
+(in distribution, ID) and in another one (out of distribution, OOD). The gap between the two is what it measures.
 Full protocol: [protocols/earthshift.md](protocols/earthshift.md).
 
 | Task | Shift | Train and ID test | OOD test |
 |---|---|---|---|
-| DE→KH | location, far | Germany | Cambodia (other continent, small plots) |
+| DE→KH | location, far | Germany | Cambodia (another continent, small plots) |
 | DE→DK | location, near | Germany | Denmark |
-| ZA A→B | season | South Africa, image window A | the same chips in window B, another time of the season |
-| DE 2018→2019 | year | Germany | Germany in another year |
+| ZA A→B | season | South Africa, image window A | the same chips in window B, another part of the season |
+| DE 2018→2019 | year | Germany | Germany in the next year |
 
-**Splits.** The paper's splits let neighbouring chips fall into both train and test, which inflates the ID
-score. AgriBench re-draws train, validation and ID test so that they never share or touch a chip, with a gap of
-at least one chip (about 1.5 km) between them. The OOD test sets are the paper's. Protocol section 2.1b has the
-details.
+**Splits.** In the paper's splits, neighbouring chips can land in both train and test, which inflates the ID
+score. AgriBench redraws train, validation and ID test so that no two of them share or touch a chip. The OOD test
+sets are the paper's. Details: protocol section 2.1b.
 
-**Models.** Each model is trained in the paper's two settings: **frozen** (the backbone is fixed and only a
-light segmentation head is trained, 40 epochs) and **full** fine-tuning (50 epochs).
+**Models.** A model here is a **backbone**: an image encoder whose patch features feed the paper's small
+segmentation head (conv → ReLU → conv). Each backbone is trained in the paper's two settings:
 
-- `resnet50-imagenet`: ResNet-50 pretrained on ImageNet, the paper's most robust model;
-- `resnet50-random`: the same network with random weights, as a floor;
-- `galileo-base`: the full Galileo-Base encoder.
+- **frozen**: the backbone's weights stay fixed and only the head trains (40 epochs);
+- **full**: everything trains (50 epochs).
 
-**Running it.** From the repo root:
+The learning rate is chosen from the paper's grid on ID validation, then 5 seeds are run on the test sets.
+
+| Backbone | What it is |
+|---|---|
+| `resnet50-imagenet` | ResNet-50 pretrained on ImageNet; the paper's most robust model |
+| `resnet50-random` | the same network with random weights, as a floor |
+| `galileo-base` | the full Galileo-Base encoder, with R, G, B and NIR in its own band slots |
+
+The per-pixel inputs and tabular heads used for YieldSAT and PLANTEUR don't carry over: a boundary needs spatial
+context, and a location encoder can't tell field from boundary within one chip. The other foundation models are
+added as backbones instead.
+
+**Running it.** From the repo root (GPU jobs):
 
     # 1. Learning-rate sweep, scored on ID validation only
     sbatch earthshift.sbatch --model resnet50-imagenet --setting frozen --task de-geo --mode sweep
@@ -205,15 +217,15 @@ light segmentation head is trained, 40 epochs) and **full** fine-tuning (50 epoc
     $project/envs/benchmark-v2/bin/python -m tools.earthshift_results
 
 `--task de-geo` trains once on Germany and scores the Germany ID test, Cambodia and Denmark together. The other
-tasks are `de-year` and `za-season`. One run takes about 50 s for ResNet-50, 5 min for frozen Galileo and 14 min
-for fully fine-tuned Galileo on an A100.
+tasks are `de-year` and `za-season`. Add `--smoke` for a one-epoch plumbing check. On an A100, one run takes
+about 50 s for ResNet-50, 5 min for frozen Galileo and 14 min for fully fine-tuned Galileo.
 
-**Inputs.** EarthShift needs a label for every pixel, so the per-pixel inputs and tabular heads used for YieldSAT
-don't carry over. Location encoders don't help either: the location barely changes within a chip. Foundation
-models are compared as backbones instead (protocol section 2.5).
+**Frozen backbones on CPU (being validated).** A frozen backbone without a trainable input adapter gives the same
+features every epoch, so they can be computed once and the head trained on them on CPU. This is being checked
+against the GPU results for Galileo before it is used for other backbones (protocol section 4).
 
-**Status.** First results are in (protocol section 4b; `results/earthshift/final.csv`, on the dashboard), mIoU
-at the model's input size, 5 seeds:
+**Results so far** (protocol section 4b; `results/earthshift/final.csv`; on the dashboard). mIoU at the model's
+input size, mean of 5 seeds:
 
 | Model | Setting | Germany ID | → Cambodia | → Denmark | DE 2018 → 2019 | ZA A → B |
 |---|---|---:|---:|---:|---:|---:|
@@ -224,52 +236,93 @@ at the model's input size, 5 seeds:
 | ResNet-50 random | frozen | 45.0 | 20.6 | 29.5 | 38.7 → 42.5 | 38.9 → 37.0 |
 | ResNet-50 random | full | 52.6 | 16.4 | 36.8 | 50.7 → 52.1 | 45.7 → 44.6 |
 
-Cambodia is the hard shift: every model loses 24–40 points, and a frozen random ResNet-50 does about as well as
-frozen Galileo. The temporal shifts barely matter. The boundary class is never predicted under the paper's recipe,
-so mIoU tops out near 67 (protocol 4b).
+- Cambodia is the hard shift: every model loses 24–40 points, and a frozen ResNet-50 with random weights does
+  about as well as frozen Galileo.
+- The season and year shifts barely matter.
+- The boundary class is never predicted under the paper's recipe, so mIoU tops out near 67.
 
 ## PLANTEUR: crop classification
 
-**The task.** Classify every pixel into one of 8 crop and land-cover classes, from Sentinel-2 time series of the
-French overseas territories (September 2018 to December 2019). There are 2,750 patches of 128 × 128 pixels:
-Réunion 813, Guadeloupe 735, Martinique 550, Guyane 506, Mayotte 140 and Saint-Martin 6. Smallholder tropical
-agriculture with heavy cloud cover makes it much harder than European benchmarks. Full protocol:
-[protocols/planteur.md](protocols/planteur.md).
+**The task.** Classify every pixel into one of 8 crop and land-cover classes, from Sentinel-2 data of the French
+overseas territories (September 2018 to December 2019). There are 2,750 patches of 128 × 128 pixels: Réunion 813,
+Guadeloupe 735, Martinique 550, Guyane 506, Mayotte 140 and Saint-Martin 6. Smallholder tropical farming under
+heavy cloud makes it much harder than European crop maps. Full protocol: [protocols/planteur.md](protocols/planteur.md).
 
-**Splits and score.** Two official splits:
+**Splits and score.** The official splits, unchanged:
 
-- **leave one island out (LOIO)**, 5 folds: train on four islands, test on the fifth. This is the headline score:
-  the mean mIoU-8 over the five islands;
-- **the default split**: patches from all islands mixed, reported alongside.
+- **leave one island out (LOIO)**, 5 folds: train on four islands and test on the fifth. This is the headline:
+  the mean mIoU over the five islands;
+- **the default split**: patches from every island mixed, reported alongside.
 
-**Inputs.** The dataset ships ready-made embeddings, and AgriBench adds raw data and two encoders:
+mIoU is over all 8 classes, Background included, from one confusion matrix over every labelled test pixel.
+
+**Inputs.** One row per labelled pixel, like YieldSAT.
 
 | Input | What it is |
 |---|---|
-| `planteur/s2-monthly` | raw Sentinel-2: 12 monthly mosaics × 10 bands |
-| `planteur/emb-aef` | AlphaEarth annual embedding (shipped) |
-| `planteur/emb-tessera-v1`, `-v1.1`, `-v2` | TESSERA embeddings (shipped) |
-| `planteur/emb-olmoearth-v1.3` | OlmoEarth embedding (shipped) |
-| `planteur/galileo-base`, `planteur/presto-base` | extracted by AgriBench with the paper's settings |
+| `s2-monthly` | raw Sentinel-2: 12 monthly mosaics × 10 bands |
+| `emb-aef`, `emb-tessera-v1`, `emb-tessera-v1.1`, `emb-tessera-v2`, `emb-olmoearth-v1.3` | the embeddings shipped with the dataset |
+| `galileo`, `presto`, `olmoearth`, `prithvi`, `anysat` | time-series encoders, run by AgriBench on the monthly mosaics with the same code as for YieldSAT |
+| `copernicusfm`, `dofa`, `croma`, `softcon`, `clay`, `satmae`, `thor`, `terramind` | single-date encoders on the patch's greenest month |
+| `s2-harmonic`, `biophys` | harmonic fit of each band's year; SNAP canopy variables per month |
+| `latlon`, `satclip`, `mind` | location only |
 
-**Heads.** The linear probe follows the paper's recipe exactly, on all training pixels, so its numbers can be
-compared with the paper's. Other heads train on up to 256 pixels per patch; TabPFN uses the official few-shot set
-of 1,000 pixels per class. Every test pixel is scored, for every head. All normalisation is fitted on the
-training fold only: the normalisation files shipped with the dataset include every island, so they are not used.
+Inputs that need the crop type or sowing date (crop-calendar alignment, WOFOST, ARC, crop-stage weather) are left
+out: the crop type is what is being predicted. How each input is built: protocol section 7.
 
-**Status.** Protocol agreed. The data is downloading to Anunna. The runner is the next thing to write. Still open:
-whether to keep the full download (258 GB, which includes the monthly mosaics and embeddings) or only the core
-(133 GB).
+**Heads.**
+
+- `probe`: the paper's linear probe on every training pixel (50 epochs, learning rate picked on validation), so
+  its numbers can be compared with the paper's. Sweeps run it on CPU;
+- `lightgbm`: at most 256 pixels per training patch, a small grid picked on validation;
+- `tabpfn`, `tabicl` (GPU): 1,000 training pixels per class;
+- `background`: predicts Background everywhere; the floor.
+
+All normalisation is fitted on the training pixels of the fold. The normalisation files shipped with the dataset
+include every island, so they are never used.
+
+**Running it.**
+
+    # One input x head x fold. planteur.sbatch asks for a GPU; for CPU heads add --partition=main --gres=none
+    sbatch --partition=main --gres=none planteur.sbatch split=loio fold=reunion input=emb-tessera-v2 \
+        model=lightgbm experiment.confirm_test=true
+    # Many runs: every fold of every input x head, as Slurm arrays (commit first)
+    $project/envs/benchmark-v2/bin/python -m tools.sweep_planteur --name mysweep \
+        --inputs emb-aef galileo --models probe lightgbm
+
+The folds are `default`, or `reunion`, `guadeloupe`, `martinique`, `guyane`, `mayotte` with `split=loio`. Without
+`experiment.confirm_test=true` a run stops after validation. Add `experiment.smoke=true` for a quick check.
+
+**Results so far** (mIoU, default split / mean of the five held-out islands; best of probe and LightGBM;
+`results/planteur/`):
+
+| Input | Default | Held-out island |
+|---|---:|---:|
+| OlmoEarth v1.3 (shipped) | 34.6 | **20.6** |
+| TESSERA v1.1 (shipped) | 33.3 | 19.7 |
+| AlphaEarth (shipped) | 33.3 | 17.5 |
+| OlmoEarth (AgriBench, monthly mosaics) | 28.0 | 18.5 |
+| TerraMind | 26.7 | 18.0 |
+| CROMA | 27.4 | 17.6 |
+| Galileo | 28.0 | 16.1 |
+| Presto | 23.1 | 14.3 |
+| S2 monthly (raw) | 25.4 | 11.9 |
+| Background only | 10.1 | 10.5 |
+
+- Moving to an island the model has never seen roughly halves mIoU for every input.
+- The shipped embeddings are ahead of every encoder AgriBench runs itself.
+- The probe beats LightGBM on most foundation-model embeddings; LightGBM is far better on raw bands.
+- The probe lands within a few points of the paper's numbers, and the Background row matches it exactly.
 
 ## Results and the dashboard
 
-All results go to [the dashboard](https://harryfyjiswalker.github.io/agribench/), one view per dataset. It shows
-each input × head combination, a table per subset, and lets you switch scheme and metric. It reads the aggregate
-tables in `results/<dataset>/`, which the sweep tools write: commit and push a table to publish it. YieldSAT and
-EarthShift are there now; PLANTEUR joins when its first results are in.
+All results are on [the dashboard](https://harryfyjiswalker.github.io/agribench/), with one view per dataset. It
+reads the aggregate tables in `results/<dataset>/`, which `tools/publish_results.sh` refreshes from Anunna every
+couple of hours: it collects every sweep, computes the YieldSAT diagnostics (bootstrap intervals, error
+decomposition, rank persistence) and opens a pull request.
 
-**The repo is public.** Commit aggregate scores only: never field names, locations, fold lists or predictions.
-The datasets have their own licences.
+**The repo is public.** Commit aggregate scores only: never field or patch identifiers, locations, fold lists or
+predictions. The datasets have their own licences.
 
 ## Where things live on Anunna
 
@@ -288,16 +341,6 @@ The datasets have their own licences.
 Every batch script first loads `tools/slurm_env.sh`. It limits library threads to the cores the job asked for
 and, if a project number is set in `$project/project.env` (or in your own `export ANUNNA_PROJECT=<number>`), tags
 the job with it for billing.
-
-## Adding an input or a head
-
-- **A new head:** copy a file in `conf/yieldsat/model/` and set `name`, an `estimator` (any
-  scikit-learn-compatible class, via `_target_`) and optionally a tuning grid in `search.param_grid`. Then use
-  `model=<name>`. To sweep it, add its resources to `RESOURCES` in `tools/sweep_yieldsat.py`.
-- **A new YieldSAT input:** write a script that saves `features/yieldsat/<name>/<subset>.npy`, with rows in the
-  order of `v1/<subset>-meta.npz`, plus a `<subset>.json` with `kind`, `feature_names`, `rows` and that meta
-  file's `v1_meta_sha256`. `tools/extract_yieldsat_aef.py` is a short example. The input is then usable as
-  `input=<name>`, alone or joined with `+`.
 
 ## Python environment
 
@@ -325,3 +368,184 @@ For an agent on your laptop to reach Anunna, add connection sharing to the `Host
     ControlPersist 8h
 
 Open the connection with `ssh -fN anunna` before starting the agent, and close it with `ssh -O exit anunna`.
+
+## Add your own model: step by step
+
+This walks through adding a new model to YieldSAT and comparing it with everything else. YieldSAT is the easiest
+place to start: a model only has to produce one feature vector per 10 m pixel, and the runner does the rest
+(splits, tuning, heads, scoring). PLANTEUR and EarthShift follow at the end.
+
+The worked example is [`tools/example_yieldsat_input.py`](tools/example_yieldsat_input.py). As shipped, it turns
+each pixel's Sentinel-2 series into an NDVI series, so you can run every step below before touching your own
+model. Each step says what you should see.
+
+### 0. Set up (once)
+
+    ssh USERNAME@login.anunna.wur.nl
+    cd /lustre/nobackup/WUR/AIN/$USER          # your own space on Lustre
+    git clone --recurse-submodules https://github.com/harryfyjiswalker/agribench.git
+    cd agribench
+    export project=/lustre/shared/agriscience-benchmark
+    export py=$project/envs/benchmark-v2/bin/python
+
+Run everything from this folder. Heavy work always goes through `sbatch`, never on the login node.
+
+### 1. Build the example input for one subset
+
+    sbatch prepare.sbatch tools.example_yieldsat_input --name $USER-ndvi --subset URG-S
+
+`--name` is your input's name. Prefix it with your username until it is reviewed, so it can't clash with anyone
+else's. Check with `squeue --me`; it takes under a minute. The log (`slurm-<jobid>.out`) ends with:
+
+    Wrote /lustre/shared/agriscience-benchmark/features/yieldsat/<you>-ndvi/URG-S.npy (2,177,206 x 24) and .../URG-S.json
+
+So the input is two files per subset: the features (one row per pixel, in the cache's pixel order) and a small
+JSON that records the feature names, the row count and a hash of the pixel list. The runner checks both, so a file
+built for the wrong pixels is refused rather than silently misread.
+
+### 2. Check that the runner accepts it
+
+    sbatch yieldsat.sbatch subset=URG-S scheme=loyo input=$USER-ndvi model=probe experiment.smoke=true
+
+`experiment.smoke=true` runs a cut-down version in about a minute; its scores mean nothing. The log ends with
+`Outputs: .../runs/yieldsat/<you>/<time>-<jobid>`. If it fails, see [Troubleshooting](#troubleshooting).
+
+### 3. One real run
+
+    sbatch yieldsat.sbatch subset=URG-S scheme=loyo input=$USER-ndvi model=probe
+
+That is Uruguay soybean, leave one year out, linear probe. It takes a minute or two. Read the headline scores:
+
+    $py -c "import json,sys; m=json.load(open(sys.argv[1]+'/metrics.json')); print(m['pooled'])" <output folder>
+
+For the example you should get a pooled field R² of about 0.22. For comparison, on this subset and scheme the
+training-mean floor (`model=mean`) gets −0.61 and raw `s2` with the probe gets 0.60, the best of all inputs so
+far: NDVI alone throws away most of what the bands carry.
+
+### 4. Put in your own model
+
+Copy the example and edit only the `embed()` function:
+
+    cp tools/example_yieldsat_input.py tools/embed_yieldsat_mymodel.py
+
+- **What `embed()` gets:** a batch of pixels' raw Sentinel-2 values, `(pixels, 288)` float32, with NaN where
+  there was no observation, and the column names `<band>_t<step>` (12 bands B01–B12 including B8A, 24 time steps
+  over the season).
+- **What it returns:** `(pixels, d)` features and a list of `d` names. Any `d` works. Values are stored as float16,
+  so keep them below about 65,000 in size (embeddings always are).
+- **Set `METHOD`** at the top of the file to one line that describes your input.
+- **If your model needs more than the pixel's own series** (image patches around it, dates, the field outline),
+  load that inside `embed()` from `$project/datasets/yieldsat/`. The meta file
+  `$project/features/yieldsat/v1/<subset>-meta.npz` says which field (`field_idx`) and which pixel of that field's
+  raster (`row`, `col`) each row is. The existing wrappers (`tools/embed_yieldsat_*.py`) show how each foundation
+  model is fed; reuse them where you can.
+- **Model weights** go in your own space or in `$project/checkpoints/`. Load PyTorch checkpoints with
+  `torch.load(..., weights_only=True)`.
+- **If it needs a GPU,** use `prepare-gpu.sbatch` instead of `prepare.sbatch` (same arguments).
+- **If it needs a package the shared environment lacks,** make your own environment (see
+  [Python environment](#python-environment)) and put `BENCHMARK_PYTHON=~/myenv/bin/python` in front of `sbatch`.
+
+Test on one subset as in steps 1–3, using your new script's module name (`tools.embed_yieldsat_mymodel`).
+
+### 5. Build all nine subsets
+
+    for s in ARG-C ARG-S ARG-W BRA-C BRA-S BRA-W GER-R GER-W URG-S; do
+        sbatch prepare.sbatch tools.embed_yieldsat_mymodel --name $USER-mymodel --subset $s
+    done
+
+Add `--overwrite` to rebuild a subset that already exists. Check that all nine are there:
+
+    ls $project/features/yieldsat/$USER-mymodel/        # 9 .npy and 9 .json files
+
+### 6. Run the full comparison (a sweep)
+
+A sweep runs every subset × split scheme × head as Slurm job arrays. Look at the plan first:
+
+    $py -m tools.sweep_yieldsat --name $USER-mymodel --inputs $USER-mymodel --models probe lightgbm --dry-run
+
+Then run it without `--dry-run`. Notes:
+
+- **Commit your changes first.** A sweep runs a frozen copy of your current commit and refuses to start if
+  tracked files have uncommitted edits. Every result records the commit it came from.
+- **Heads:** `probe` and `lightgbm` run on CPU and are the ones to start with. `tabpfn` and `tabicl` need GPUs,
+  which are often busy. `mean` is the floor every input must beat.
+- **Schemes:** by default `cv10`, `loyo` and `loro`. Leave one year out (`loyo`) is the headline. Leave one
+  country out is the final test: add `--schemes loco` only once you are done choosing.
+- **Combinations:** `--inputs $USER-mymodel+mind` joins your input with another one, column by column.
+- **Resuming:** run the same command again; finished folds are skipped.
+- **Size:** for one input with `probe` and `lightgbm` the plan is 400 tasks (one per fold) in 2 arrays, most of
+  them a few minutes each. Follow them with `squeue --me`.
+
+When the arrays finish, the sweep writes `results/yieldsat/$USER-mymodel.csv` in your checkout: one row per
+subset × scheme × input × head, with field and pixel R² and RMSE.
+
+### 7. Compare with everything else
+
+- **On the dashboard.** The regular publish collects every sweep under `$project/runs/yieldsat/sweeps/`, so your
+  input appears on [the dashboard](https://harryfyjiswalker.github.io/agribench/) next to all the others, with
+  bootstrap intervals and the error decomposition, within a couple of hours. The dashboard is public, and only
+  aggregate scores are shown.
+- **Straight away.** Open `results/yieldsat/$USER-mymodel.csv`. For a like-for-like comparison, use
+  `pooled_field_r2` for `loyo` and `loro` (and `field_r2_mean` for `cv10`), averaged over the nine subsets, as
+  the dashboard does. The other inputs' tables are in `results/yieldsat/` of the main branch.
+
+### 8. Make it an official input
+
+Open a pull request with your `tools/embed_yieldsat_<model>.py`, a row in the YieldSAT input table above, and a
+short entry in protocol section 2.5: which weights (and their version), what the model sees, and how features are
+taken per pixel. Keep the repo public-safe: no field names, locations, fold lists or predictions.
+
+### Troubleshooting
+
+| Message | What it means |
+|---|---|
+| `Unknown input '<name>': no .../<subset>.json` | That subset hasn't been built yet (step 5), or the name is misspelt |
+| `Input block '<name>' has no cache yet (.../ARG-C.json)` | The sweep tool reads the first subset (ARG-C) to size the jobs: build all nine first |
+| `... was built for different v1 cache rows` | The features were built for another version of the pixel cache: rebuild with `--overwrite` |
+| `row count differs from the stored array` | `embed()` returned a different number of rows than it was given |
+| `Values too large for float16` | rescale your features in `embed()` |
+| `The checkout has uncommitted changes` | commit before sweeping (step 6) |
+| A job is killed for memory (`OUT_OF_MEMORY` in `sacct -j <jobid>`) | ask for more: `sbatch --mem=64G prepare.sbatch ...` |
+
+### PLANTEUR
+
+An input is one folder in `$project/features/planteur/<name>/` with `X.npy` (one row per labelled pixel, in the
+row order of `$project/features/planteur/meta.npz`), `valid.npy` (one boolean per row: False where your model has
+no value for that pixel) and `info.json` (at least `kind: "dense"`, `feature_names`, `rows` and the `meta_sha256`
+of `meta.npz`). The raw data is in `$project/datasets/planteur/` (monthly mosaics in `DATA_S2_MONTHLY`).
+
+If your model already has a YieldSAT wrapper, [`tools/planteur_embed.py`](tools/planteur_embed.py) can run it on
+PLANTEUR in the same way as the other encoders (protocol section 7). Then:
+
+    # Single run on CPU (LightGBM), one held-out island
+    sbatch --partition=main --gres=none planteur.sbatch split=loio fold=reunion input=<name> model=lightgbm \
+        experiment.confirm_test=true
+    # Every fold and head: add the name to INPUTS in tools/planteur.py, commit, then
+    $py -m tools.sweep_planteur --name $USER-<name> --inputs <name> --models probe lightgbm
+
+### EarthShift
+
+A backbone is a small PyTorch class in [`tools/earthshift_train.py`](tools/earthshift_train.py), added to `MODELS`.
+It needs:
+
+- `input_size`: the image size it expects (chips are resized to it);
+- `out_channels`: the number of feature channels it returns;
+- `prepare(dn, months)`: turns raw 4-band digital numbers (R, G, B, NIR) into the model's input (scaling and
+  normalisation);
+- `features(x, months)`: returns a feature map of shape `(batch, out_channels, h, w)`;
+- `self.adapter`, a learnable 1 × 1 convolution, only if the model can't take R, G, B and NIR directly.
+
+`ResNet50` and `Galileo` in that file are the two patterns to copy. Then check it and run it:
+
+    sbatch earthshift.sbatch --model <name> --setting frozen --task de-geo --mode sweep --smoke
+    sbatch earthshift.sbatch --model <name> --setting frozen --task de-geo --mode sweep
+    $py -m tools.earthshift_results --best-lr
+    sbatch earthshift.sbatch --model <name> --setting frozen --task de-geo --mode final --lr <chosen> --confirm-test
+
+Repeat for `--task de-year` and `--task za-season`, and for `--setting full`.
+
+### A new head
+
+Copy a file in `conf/yieldsat/model/` and set `name`, an `estimator` (any scikit-learn-compatible class, via
+`_target_`) and, optionally, a tuning grid in `search.param_grid`. Then use `model=<name>`. To sweep it, add its
+resources to `RESOURCES` in `tools/sweep_yieldsat.py`.
