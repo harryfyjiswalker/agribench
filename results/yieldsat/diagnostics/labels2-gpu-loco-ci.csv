@@ -1,3 +1,7 @@
 subset,scheme,input,model,field_r2,field_r2_lo,field_r2_hi,field_rmse,field_rmse_lo,field_rmse_hi
 corn,loco,s2-aligned@f0.05-s0,tabpfn,-0.8179,-1.1289,-0.5736,3.5845,3.2865,3.8645
 corn,loco,s2-aligned@f0.05-s1,tabpfn,-0.8007,-1.0707,-0.5853,3.5675,3.3142,3.8183
+corn,loco,s2-aligned@f0.05-s2,tabpfn,0.1574,0.0517,0.257,2.4403,2.252,2.6282
+corn,loco,s2-aligned@f0.10-s0,tabpfn,-0.9293,-1.145,-0.7383,3.6927,3.4491,3.9216
+corn,loco,s2-aligned@f0.10-s1,tabpfn,-0.3701,-0.5274,-0.225,3.1118,2.8966,3.3113
+corn,loco,s2-aligned@f0.10-s2,tabpfn,-1.2997,-1.582,-1.0659,4.0316,3.7826,4.2834

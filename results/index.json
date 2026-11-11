@@ -1,5 +1,5 @@
 {
-  "updated": "2026-11-11 15:18 CET",
+  "updated": "2026-11-11 15:40 CET",
   "files": [
     {
       "path": "earthshift/final.csv"
@@ -54,6 +54,9 @@
     },
     {
       "path": "yieldsat/labels3-loco.csv"
+    },
+    {
+      "path": "yieldsat/labels3-loyo.csv"
     },
     {
       "path": "yieldsat/loco1-gpu.csv"
