@@ -62,10 +62,11 @@ def row_of(result, sweep, input_dir=None):
     return r
 
 
-def loco_rows(result, sweep):
+def loco_rows(result, sweep, input_dir=None):
     """Leave one country out: the crop row (pooled over held-out countries) plus one row per held-out country,
-    labelled "<crop>>COUNTRY" (a single fold, so its mean and pooled scores are the same and std is 0)."""
-    rows = [row_of(result, sweep)]
+    labelled "<crop>>COUNTRY" (a single fold, so its mean and pooled scores are the same and std is 0).
+    input_dir keeps the variant suffix (s2@f0.25-s1), as for the other schemes."""
+    rows = [row_of(result, sweep, input_dir)]
     for f in result["per_fold"]:
         r = dict(rows[0], subset=f"{result['label']}>{f['held_out_country']}", folds=1,
                  task_hours=round(f["seconds"] / 3600, 3))
@@ -154,7 +155,7 @@ def main():
             continue
         if result["smoke"]:
             continue
-        rows.extend(loco_rows(result, args.sweep) if result["scheme"] == "loco" else
+        rows.extend(loco_rows(result, args.sweep, d.parent.name) if result["scheme"] == "loco" else
                     [row_of(result, args.sweep, d.parent.name)])
     if incomplete:
         print(f"{len(incomplete)} incomplete runs:\n  " + "\n  ".join(incomplete[:50]))
