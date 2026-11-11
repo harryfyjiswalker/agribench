@@ -28,7 +28,7 @@ rm -f results/yieldsat/*.csv.tmp
 ids=()
 for d in "$project"/runs/yieldsat/sweeps/*/; do
   s=$(basename "$d"); [[ $s == _* ]] && continue
-  ids+=("$(sbatch --parsable --job-name=ys-pub-collect-$s --time=00:30:00 --mem=8G --cpus-per-task=1 \
+  ids+=("$(sbatch --parsable --job-name=ys-pub-collect-$s --time=02:00:00 --mem=32G --cpus-per-task=8 \
     --output="$d/_logs/pubcollect-%j.log" prepare.sbatch tools.collect_yieldsat --sweep "$s")")
 done
 rm -f results/planteur/*.csv.tmp
