@@ -117,10 +117,14 @@ def units(args):
 
 
 def variants(args):
-    """(directory suffix, overrides): the base run, or one per early-season cutoff / label fraction x seed (2.11).
-    The suffix keeps each variant's run directory apart: <input>@d060, <input>@f0.10-s1."""
-    if args.season_cutoffs and args.train_fractions:
-        raise SystemExit("Use --season-cutoffs or --train-fractions, not both")
+    """(directory suffix, overrides): the base run, or one per early-season cutoff / label fraction x seed (2.11)
+    / training-pixel cap (2.7). The suffix keeps each variant's run directory apart: <input>@d060,
+    <input>@f0.10-s1, <input>@c032 (c000 = every pixel)."""
+    if sum(map(bool, (args.season_cutoffs, args.train_fractions, args.pixel_caps))) > 1:
+        raise SystemExit("Use only one of --season-cutoffs, --train-fractions and --pixel-caps")
+    if args.pixel_caps:
+        # ++ sets the head's own cap, which TabPFN and TabICL define and the other heads inherit
+        return [(f"@c{c:03d}", [f"++model.pixel_cap={c}"]) for c in args.pixel_caps]
     if args.season_cutoffs:
         return [(f"@d{c:03d}", [f"experiment.season_cutoff={c}"]) for c in args.season_cutoffs]
     if args.train_fractions:
@@ -189,6 +193,8 @@ def main():
     parser.add_argument("--train-fractions", nargs="+", type=float, default=[],
                         help="label efficiency: one run per fraction of training fields and seed")
     parser.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2], help="for --train-fractions")
+    parser.add_argument("--pixel-caps", nargs="+", type=int, default=[],
+                        help="cap sensitivity: one run per training-pixel cap per field (0 = every pixel)")
     parser.add_argument("--max-running", type=int, default=200)
     parser.add_argument("--resource-scale", type=float, default=1.0,
                         help="multiply memory and time limits (loco pools countries, so its training sets are larger)")

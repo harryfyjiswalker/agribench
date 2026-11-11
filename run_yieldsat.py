@@ -256,7 +256,9 @@ def main(cfg):
     search = head.get("search")
     grid = OmegaConf.to_container(search.param_grid, resolve=True) if search and "param_grid" in search else {}
     internal_cv = bool(head.get("internal_cv", False))  # the estimator tunes itself on the inner folds
-    cap = 16 if smoke else int(head.get("pixel_cap") or cfg.experiment.pixel_cap)
+    head_cap = head.get("pixel_cap")
+    cap = 16 if smoke else int(cfg.experiment.pixel_cap if head_cap is None else head_cap)
+    cap = cap or None  # 0 = no cap: every training pixel (2.7, cap sensitivity)
     test_cap = 200 if smoke else None
     batch = int(head.get("predict_batch") or cfg.experiment.predict_batch)
     if smoke and grid:
@@ -272,7 +274,7 @@ def main(cfg):
     common = {
         "dataset": "yieldsat", "label": label, "scheme": scheme, "input": cfg.input, "model": head.name,
         "split": "smoke" if smoke else ("final" if scheme == "loco" else "development"),
-        "smoke": smoke, "seed": seed, "pixel_cap": cap, "folds_in_scheme": len(np.unique(gfold)),
+        "smoke": smoke, "seed": seed, "pixel_cap": cap or 0, "folds_in_scheme": len(np.unique(gfold)),
         "season_cutoff": None if cutoff is None else int(cutoff), "train_fraction": fraction,
         "provenance": {"fold_file": str(fold_file), "fold_file_sha256": ys.sha256(fold_file),
                        "folds_manifest_sha256": ys.sha256(splits / "manifest.json"),

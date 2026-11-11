@@ -520,6 +520,9 @@ pixels within a field are strongly autocorrelated anyway.
 - **Evaluation:** always uses **all** pixels of the test fields.
 - The cap is part of the protocol, so every head uses it. A run may raise it, but it is then marked as a
   separate configuration.
+- **Cap sensitivity** (`tools.sweep_yieldsat --pixel-caps 32 256 0`): one run per cap, in run directories
+  `<input>@c032` (`@c000` = every training pixel, recorded as `pixel_cap` 0). It sets the head's own cap, so it
+  also changes TabPFN's and TabICL's 32. The dashboard keeps these variants out of the main comparison.
 
 ### 2.8 Frozen fold files and provenance [AgriBench]
 
