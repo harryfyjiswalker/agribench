@@ -243,7 +243,7 @@ def main():
     if jobs:
         dep = ["--dependency=afterany:" + ":".join(jobs)] if not args.dry_run else []
         submit([f"{SLURM}/sbatch", "--parsable", *dep, f"--job-name=ys-{args.name}-collect", f"--chdir={checkout}",
-                f"--output={log_dir}/collect-%j.log", "--time=00:30:00", "--mem=8G", "--cpus-per-task=1",
+                f"--output={log_dir}/collect-%j.log", "--time=02:00:00", "--mem=32G", "--cpus-per-task=8",
                 str(repo / "prepare.sbatch"), "tools.collect_yieldsat", "--sweep", args.name], args.dry_run)
     print(f"{len(tasks)} tasks in {len(groups)} arrays; outputs under {runs_root}")
 

@@ -10,8 +10,10 @@ the dataset licence covers the data, not our summaries. The dashboard (dashboard
 """
 import argparse
 import json
+import os
 import subprocess
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pandas as pd
@@ -24,6 +26,20 @@ SLURM = "/cm/shared/apps/slurm/current/bin"
 
 def run_dirs(root):
     return sorted({f.parent for f in root.glob("*/*/*/*/fold-*.json")})
+
+
+def needs_combine(d):
+    """metrics.json is missing or older than one of the run's fold files."""
+    m = d / "metrics.json"
+    return not m.exists() or max(f.stat().st_mtime for f in res.fold_files(d)) > m.stat().st_mtime
+
+
+def combine_or_error(d):
+    """res.combine for a worker process: the result, or the error message if the run is incomplete."""
+    try:
+        return res.combine(d)
+    except ValueError as error:
+        return str(error)
 
 
 def row_of(result, sweep, input_dir=None):
@@ -117,17 +133,24 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--sweep", required=True)
     parser.add_argument("--efficiency", action="store_true")
+    parser.add_argument("--workers", type=int, default=int(os.environ.get("SLURM_CPUS_PER_TASK", 1)),
+                        help="processes for combining runs (default: the job's CPUs)")
     parser.add_argument("--out", type=Path, default=Path(__file__).resolve().parents[1] / "results" / "yieldsat")
     args = parser.parse_args()
     root = ys.PROJECT / "runs" / "yieldsat" / "sweeps" / args.sweep
     rows, incomplete = [], []
-    for d in run_dirs(root):
-        try:
-            result = res.combine(d) if not (d / "metrics.json").exists() or \
-                max(f.stat().st_mtime for f in res.fold_files(d)) > (d / "metrics.json").stat().st_mtime \
-                else json.loads((d / "metrics.json").read_text())
-        except ValueError as error:
-            incomplete.append(f"{d.relative_to(root)}: {error}")
+    dirs = run_dirs(root)
+    stale = [d for d in dirs if needs_combine(d)]
+    combined = {}
+    if stale:  # combining reads and rewrites every held-out pixel's prediction: parallel over runs
+        workers = max(1, min(args.workers, len(stale)))
+        print(f"Combining {len(stale)} of {len(dirs)} runs with {workers} workers", flush=True)
+        with ProcessPoolExecutor(workers) as pool:
+            combined = dict(zip(stale, pool.map(combine_or_error, stale, chunksize=4)))
+    for d in dirs:
+        result = combined[d] if d in combined else json.loads((d / "metrics.json").read_text())
+        if isinstance(result, str):
+            incomplete.append(f"{d.relative_to(root)}: {result}")
             continue
         if result["smoke"]:
             continue
