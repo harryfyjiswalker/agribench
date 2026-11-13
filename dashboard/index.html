@@ -233,7 +233,10 @@ const PL_PAPER = {
   "emb-tessera-v2|probe": {def: 34.20, loio: [11.50, 28.79, 29.57, 12.26, 12.43, 18.91]},
   "emb-olmoearth-v1.3|probe": {def: 36.88, loio: [26.43, 31.16, 35.16, 15.50, 12.42, 24.13]},
   "galileo|probe": {def: 34.71}, "presto|probe": {def: 16.25}};
-const plPaper = r => PL_PAPER[`${r.input}|${r.model}`] || (r.model === "background" ? PL_PAPER["*|background"] : null);
+const plFewshotCpu = r => String(r.regime || "").startsWith("fewshot") && (r.model === "probe" || r.model === "lightgbm");
+const plPaper = r => plFewshotCpu(r) ? null :  // the paper's probe rows use every pixel, not the few-shot set
+  PL_PAPER[`${r.input}|${r.model}`] || (r.model === "background" ? PL_PAPER["*|background"] : null);
+const plHead = e => (PL_HEAD_LABEL[e.model] || e.model) + (plFewshotCpu(e) ? " (few-shot)" : "");
 let plSort = {key: "mean", dir: -1};
 const ES_MODEL_LABEL = {resnet50: "ResNet-50", "resnet50-imagenet": "ResNet-50 (ImageNet)", "resnet50-random": "ResNet-50 (random init)", galileo: "Galileo", "galileo-base": "Galileo base"};
 const ES_SETTING_LABEL = {frozen: "frozen encoder", full: "full fine-tuning"};
@@ -333,7 +336,10 @@ function render() {
   document.querySelectorAll(".pl").forEach(el => el.classList.toggle("hidden", !pl));
   // Controls that do nothing in the current view are hidden (e.g. Head on the early-season view).
   document.querySelectorAll("[data-for]").forEach(el => el.classList.toggle("hidden", Boolean(other || !el.dataset.for.split(" ").includes(view))));
-  if (pl) return renderPlanteur(ROWS.filter(r => r.dataset === "planteur" && !String(r.input).includes("@")));
+  // Few-shot variants (input@x1000) join the main view as their own head rows (the regime tells them apart).
+  if (pl) return renderPlanteur(ROWS.filter(r => r.dataset === "planteur")
+    .map(r => /@x\d+$/.test(r.input) ? {...r, input: r.input.replace(/@x\d+$/, "")} : r)
+    .filter(r => !String(r.input).includes("@")));
   if (es) return renderEarthShift(ROWS.filter(r => r.dataset === "earthshift" && r.test_set === val("f-testset")));
   if (!es && view === "early") return renderEarly(scheme, metric);
   if (!es && view === "labels") return renderLabels(scheme, metric);
@@ -632,7 +638,7 @@ function plEntries(rows) {
   return Object.values(by);
 }
 const plInput = e => e.model === "background" ? "Trivial" : (PL_INPUT_LABEL[e.input] || e.input);
-const plLabel = e => `${plInput(e)} · ${PL_HEAD_LABEL[e.model] || e.model}`;
+const plLabel = e => `${plInput(e)} · ${plHead(e)}`;
 const plTip = (e, r, what) => r ? `<b>${plLabel(e)}</b> · ${what}<br>mIoU-8 ${r.miou8.toFixed(2)} · OA ${r.oa.toFixed(2)}` +
   (r.params ? `<br>chosen on val: ${r.params} (val mIoU-8 ${r.val_miou8.toFixed(2)})` : "") +
   (r.train_pixels ? `<br>${(+r.train_pixels).toLocaleString()} training pixels (${r.regime})` : "") : "";
@@ -680,7 +686,7 @@ function renderPlanteur(rows) {
   const v = (e, c) => c === "mean" ? (e.mean ? e.mean.miou8 : NaN) : c === "def" ? (e.def ? e.def.miou8 : NaN)
     : c === "pmean" ? ((plPaper(e) || {}).loio || [])[5] : c === "pdef" ? (plPaper(e) || {}).def
     : (e.islands[c] ? e.islands[c].miou8 : NaN);
-  const key = e => plSort.key === "input" ? plLabel(e) : plSort.key === "model" ? (PL_HEAD_LABEL[e.model] || e.model) : v(e, plSort.key);
+  const key = e => plSort.key === "input" ? plLabel(e) : plSort.key === "model" ? plHead(e) : v(e, plSort.key);
   const te = [...entries].sort((a, b) => { const p = key(a), q = key(b);
     if (typeof p === "string") return p.localeCompare(q) * plSort.dir;
     if (p == null || isNaN(p)) return 1; if (q == null || isNaN(q)) return -1; return (p - q) * plSort.dir; });
@@ -689,7 +695,7 @@ function renderPlanteur(rows) {
     return `background: var(--seq-${step}); color: ${step >= 4 ? "#fff" : "var(--text-primary)"};`; };
   let h = `<thead><tr>${cols.map(([c, n], i) => `<th class="${i < 2 ? "l" : ""}" data-key="${c}">${n}${arrow(c)}</th>`).join("")}</tr></thead><tbody>`;
   for (const e of te) {
-    h += `<tr><td class="l">${plInput(e)}</td><td class="l">${PL_HEAD_LABEL[e.model] || e.model}</td>`;
+    h += `<tr><td class="l">${plInput(e)}</td><td class="l">${plHead(e)}</td>`;
     for (const [c, n] of cols.slice(2)) {
       const r = c === "mean" ? e.mean : c === "def" ? e.def : e.islands[c];
       const paper = c.startsWith("p");
