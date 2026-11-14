@@ -79,7 +79,8 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
     tested on another (out-of-distribution, OOD), following the EarthShift paper's tasks and metrics. Scores are mIoU in percentage points, mean over seeds.</p>
   <p class="lede pl hidden">PLANTEUR crop-type segmentation in France's tropical overseas territories: per-pixel heads on frozen
     representations, scored by mIoU over the 8 classes (Background included, void excluded), in percent. The headline is leave one
-    island out (LOIO: train on four territories, test on the fifth; mean of the five), with the in-domain default test split beside it.</p>
+    island out (LOIO: train on four territories, test on the fifth; mean of the five), with the in-domain default test split beside it.
+    Choose the training regime (the matched few-shot set, or the full training set) and which split to rank by.</p>
   <p class="meta" id="meta">Loading results…</p>
 
   <section class="card">
@@ -102,6 +103,14 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
         <option value="pixel_rmse">Pixel RMSE, t/ha, mean of folds (lower is better)</option>
       </select></label>
       <label class="ys" data-for="main labels">Head <select id="f-model"></select></label>
+      <label class="pl hidden">Training data <select id="f-plregime">
+        <option value="fewshot">Few-shot: 1,000 pixels per class (all heads)</option>
+        <option value="full">Full training set (probe and LightGBM only)</option>
+      </select></label>
+      <label class="pl hidden">Rank by <select id="f-plsplit">
+        <option value="loio">Unseen island (LOIO mean)</option>
+        <option value="def">In-domain (default test)</option>
+      </select></label>
     </div>
   </section>
 
@@ -179,20 +188,26 @@ footer { color: var(--text-muted); font-size: 13px; margin-top: 24px; }
   </section>
 
   <section class="card pl hidden">
-    <h2>In-domain test vs an unseen island</h2>
-    <p class="note">Each row is one input and head. The circle is the default split's test score (443 patches, in-domain), the
-      square the LOIO mean (each territory held out in turn); the gap is what is lost on an unseen island. Hollow markers are
-      the paper's numbers for the same row, where it has one (Tables 2 and 6). Hover for OA and the chosen setting.</p>
+    <h2 id="pl-title">Ranking</h2>
+    <p class="note" id="pl-note"></p>
     <div class="legend" id="pl-legend"></div>
-    <div class="chart-wrap"><svg id="pl-chart" role="img" aria-label="Default-split and LOIO mIoU-8 by input and head"></svg></div>
+    <div class="chart-wrap"><svg id="pl-chart" role="img" aria-label="Ranked mIoU-8 by input and head"></svg></div>
+  </section>
+
+  <section class="card pl hidden">
+    <h2>Do the rankings agree?</h2>
+    <p class="note">Each input's best head in each training regime and split, with its rank among the inputs scored in that
+      column (1 = best) and its mIoU-8. Rows follow the column chosen above (underlined). The few-shot columns compare all heads
+      on the same 8,000 training pixels; the full columns use every labelled pixel for the probe and up to 256 per patch for
+      LightGBM (the paper's Table 2 and 6 setting) and have no TabPFN or TabICL, which cannot take that many rows. Click a
+      header to sort.</p>
+    <p class="note" id="pl-agree"></p>
+    <div class="table-wrap"><table id="pl-rank-table"></table></div>
   </section>
 
   <section class="card pl hidden">
     <h2>Per island</h2>
-    <p class="note">mIoU-8 (%) on each held-out territory, their unweighted mean (the headline, as in paper Table 6), and the
-      default-split test (paper Table 2). "Paper" columns repeat the authors' value for the same input and head. Mayotte is 99%
-      Background, so predicting Background everywhere already scores 12.4 there. Few-shot rows (TabPFN, TabICL) train on 1,000
-      pixels per class and compare with paper Table 7, not Table 2. Click a header to sort.</p>
+    <p class="note" id="pl-table-note"></p>
     <div class="table-wrap"><table id="pl-table"></table></div>
   </section>
 
@@ -223,7 +238,12 @@ const PL_INPUT_LABEL = {"s2-monthly": "S2 monthly (raw bands)", "emb-aef": "Alph
   copernicusfm: "Copernicus-FM", dofa: "DOFA", croma: "CROMA", softcon: "SoftCon", clay: "Clay", satmae: "SatMAE",
   thor: "THOR", terramind: "TerraMind", latlon: "Lat/lon", satclip: "SatCLIP", mind: "MIND",
   "s2-harmonic": "S2 (harmonic)", biophys: "SNAP biophysical"};
-const PL_HEAD_LABEL = {probe: "linear probe", lightgbm: "LightGBM", tabpfn: "TabPFN (few-shot)", tabicl: "TabICL (few-shot)", background: "all Background"};
+const PL_HEAD_LABEL = {probe: "linear probe", lightgbm: "LightGBM", tabpfn: "TabPFN", tabicl: "TabICL", background: "all Background"};
+const PL_HEADS = ["probe", "lightgbm", "tabpfn", "tabicl"];
+const PL_COLS = [["fewshot", "def", "Few-shot · in-domain"], ["fewshot", "loio", "Few-shot · unseen island"],
+  ["full", "def", "Full · in-domain"], ["full", "loio", "Full · unseen island"]];
+// Regime of a row: the official few-shot set (1,000 px per class) or the full training set; Background (no training) is both.
+const plRegime = r => r.model === "background" ? "both" : String(r.regime || "").startsWith("fewshot") ? "fewshot" : "full";
 const PL_ISLANDS = [["reunion", "Réunion"], ["guadeloupe", "Guadeloupe"], ["martinique", "Martinique"], ["guyane", "Guyane"], ["mayotte", "Mayotte"]];
 // Paper reference numbers (protocols/planteur.md section 4): default = Table 2 test mIoU-8, loio = Table 6 per island + mean.
 const PL_PAPER = {
@@ -236,8 +256,8 @@ const PL_PAPER = {
 const plFewshotCpu = r => String(r.regime || "").startsWith("fewshot") && (r.model === "probe" || r.model === "lightgbm");
 const plPaper = r => plFewshotCpu(r) ? null :  // the paper's probe rows use every pixel, not the few-shot set
   PL_PAPER[`${r.input}|${r.model}`] || (r.model === "background" ? PL_PAPER["*|background"] : null);
-const plHead = e => (PL_HEAD_LABEL[e.model] || e.model) + (plFewshotCpu(e) ? " (few-shot)" : "");
-let plSort = {key: "mean", dir: -1};
+const plHead = e => PL_HEAD_LABEL[e.model] || e.model;
+let plSort = {key: "mean", dir: -1}, plRankSort = null;
 const ES_MODEL_LABEL = {resnet50: "ResNet-50", "resnet50-imagenet": "ResNet-50 (ImageNet)", "resnet50-random": "ResNet-50 (random init)", galileo: "Galileo", "galileo-base": "Galileo base"};
 const ES_SETTING_LABEL = {frozen: "frozen encoder", full: "full fine-tuning"};
 const esLabel = r => `${ES_MODEL_LABEL[r.model] || r.model} · ${ES_SETTING_LABEL[r.setting] || r.setting}`;
@@ -290,6 +310,7 @@ async function load() {
   fill("f-dataset", [...new Set(ROWS.map(r => r.dataset))].sort((a, b) => DS_ORDER.indexOf(a) - DS_ORDER.indexOf(b)), d => DATASET_LABEL[d] || d);
   fill("f-testset", [...new Set(ROWS.filter(r => r.dataset === "earthshift").map(r => r.test_set))], t => t);
   document.getElementById("f-testset").addEventListener("change", render);
+  for (const id of ["f-plregime", "f-plsplit"]) document.getElementById(id).addEventListener("change", () => { plRankSort = null; render(); });
   // Transfer schemes first: leave one year out is the headline. Random 10-fold is kept as the paper-comparable
   // reference (test fields share years and farms with training), listed last.
   fill("f-scheme", ["loyo", "loro", "loco", "cv10"].filter(s => ROWS.some(r => r.scheme === s)), s => SCHEME_LABEL[s] || s);
@@ -642,47 +663,129 @@ const plLabel = e => `${plInput(e)} · ${plHead(e)}`;
 const plTip = (e, r, what) => r ? `<b>${plLabel(e)}</b> · ${what}<br>mIoU-8 ${r.miou8.toFixed(2)} · OA ${r.oa.toFixed(2)}` +
   (r.params ? `<br>chosen on val: ${r.params} (val mIoU-8 ${r.val_miou8.toFixed(2)})` : "") +
   (r.train_pixels ? `<br>${(+r.train_pixels).toLocaleString()} training pixels (${r.regime})` : "") : "";
+function plSpearman(a, b) {
+  // a, b: arrays of paired scores; average ranks for ties
+  const rk = v => { const o = v.map((x, i) => [x, i]).sort((p, q) => q[0] - p[0]), r = new Array(v.length);
+    for (let i = 0; i < o.length;) { let j = i; while (j + 1 < o.length && o[j + 1][0] === o[i][0]) j++;
+      for (let k = i; k <= j; k++) r[o[k][1]] = (i + j) / 2 + 1; i = j + 1; } return r; };
+  const ra = rk(a), rb = rk(b), n = a.length, m = (n + 1) / 2;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < n; i++) { num += (ra[i] - m) * (rb[i] - m); da += (ra[i] - m) ** 2; db += (rb[i] - m) ** 2; }
+  return da && db ? num / Math.sqrt(da * db) : NaN;
+}
 function renderPlanteur(rows) {
-  const svg = document.getElementById("pl-chart"), t = document.getElementById("pl-table");
+  const svg = document.getElementById("pl-chart"), t = document.getElementById("pl-table"), rt = document.getElementById("pl-rank-table");
   const f2 = v => v == null || isNaN(v) ? "–" : v.toFixed(2);
-  document.getElementById("pl-legend").innerHTML =
-    `<span><svg width="14" height="14">${marker("circle", 7, 7, 5, "var(--series-1)")}</svg>Default test (in-domain)</span>` +
-    `<span><svg width="14" height="14">${marker("square", 7, 7, 5, "var(--series-2)")}</svg>LOIO mean (unseen island)</span>` +
-    `<span><svg width="14" height="14">${marker("circle", 7, 7, 5, "var(--text-muted)", false, true)}</svg>Paper</span>`;
-  const entries = plEntries(rows);
-  if (!entries.length) {
+  const regime = val("f-plregime"), split = val("f-plsplit"), other = split === "loio" ? "def" : "loio";
+  const SPLIT_NAME = {loio: "unseen island (LOIO mean)", def: "in-domain default test"};
+  const sc = (e, s) => s === "loio" ? (e.mean ? e.mean.miou8 : null) : (e.def ? e.def.miou8 : null);
+  const headColor = m => `var(--series-${PL_HEADS.indexOf(m) + 1})`;
+  const all = plEntries(rows);
+  if (!all.length) {
     svg.setAttribute("height", 40); svg.innerHTML = `<text x="0" y="24">No PLANTEUR results published yet.</text>`;
-    t.innerHTML = ""; return;
+    t.innerHTML = rt.innerHTML = ""; return;
   }
-  // Chart: rows sorted by LOIO mean (then default test); rows with neither finished score are left out.
-  const score = e => e.mean ? e.mean.miou8 : (e.def ? e.def.miou8 - 100 : -1e9);
-  const ce = entries.filter(e => e.mean || e.def).sort((a, b) => score(b) - score(a));
-  const labels = ce.map(plLabel), L = labelWidth(labels);
-  const W = Math.max(svg.parentElement.clientWidth, 520), R = 24, T = 28, rowH = 30, H = T + ce.length * rowH + 8;
+  const inRegime = (e, g) => { const r = plRegime(e); return r === "both" || r === g; };
+  const entries = all.filter(e => inRegime(e, regime));
+  const heads = PL_HEADS.filter(m => entries.some(e => e.model === m));
+
+  // ---- Chart: one ranked list for the chosen regime and split ----
+  document.getElementById("pl-title").textContent =
+    `${regime === "fewshot" ? "Few-shot" : "Full training set"}: ranked on the ${SPLIT_NAME[split]}`;
+  document.getElementById("pl-note").textContent = (regime === "fewshot"
+    ? "Every head trains on the same official few-shot set: 1,000 labelled pixels per class (8,000 in all), so heads and inputs are compared on equal data. "
+    : "The probe trains on every labelled pixel and LightGBM on up to 256 pixels per patch, as in the paper's Tables 2 and 6. TabPFN and TabICL are not in this regime. ") +
+    `Each row is one input and head, ranked by its ${SPLIT_NAME[split]} mIoU-8; the coloured marker is that score, coloured by head. ` +
+    `The grey marker is the same row on the ${SPLIT_NAME[other]}, so the line shows the gap between the two.` +
+    (regime === "full" ? " Hollow markers are the paper's value for the same row." : "") +
+    " Rows without a finished score on the ranking split are left out. Hover for OA and the chosen setting.";
+  document.getElementById("pl-legend").innerHTML = heads.map(m =>
+    `<span><svg width="14" height="14">${marker("circle", 7, 7, 5, headColor(m))}</svg>${PL_HEAD_LABEL[m]}</span>`).join("") +
+    `<span><svg width="14" height="14">${marker("circle", 7, 7, 4, "var(--text-muted)")}</svg>${split === "loio" ? "In-domain test" : "LOIO mean"}</span>` +
+    `<span><svg width="14" height="14">${marker("circle", 7, 7, 5, "var(--text-muted)", false, true)}</svg>Trivial (all Background)</span>` +
+    (regime === "full" ? `<span><svg width="14" height="14">${marker("circle", 7, 7, 5, "var(--series-1)", false, true)}</svg>Paper</span>` : "");
+  const ce = entries.filter(e => sc(e, split) != null).sort((a, b) => sc(b, split) - sc(a, split));
+  let rank = 0;
+  const labels = ce.map(e => e.model === "background" ? `— ${plLabel(e)}` : `${++rank}. ${plLabel(e)}`), L = labelWidth(labels);
+  const W = Math.max(svg.parentElement.clientWidth, 520), R = 24, T = 28, rowH = 28, H = T + Math.max(ce.length, 1) * rowH + 8;
   svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const vals = ce.flatMap(e => { const p = plPaper(e) || {};
-    return [e.def && e.def.miou8, e.mean && e.mean.miou8, p.def, p.loio && p.loio[5]]; }).filter(v => v != null);
+  const pk = split === "loio" ? (p => p.loio && p.loio[5]) : (p => p.def);
+  const vals = ce.flatMap(e => { const p = plPaper(e) || {}; return [sc(e, "def"), sc(e, "loio"), regime === "full" ? pk(p) : null]; }).filter(v => v != null);
   const hi = Math.max(10, ...vals) * 1.06, lo = 0;
   const x = v => L + (v - lo) / (hi - lo) * (W - L - R);
   let g = "";
   for (const tk of niceTicks(lo, hi, 6)) g += `<line x1="${x(tk)}" x2="${x(tk)}" y1="${T - 6}" y2="${H - 8}" stroke="var(--grid)"/>` +
     `<text x="${x(tk)}" y="${T - 12}" text-anchor="middle">${tk}</text>`;
+  if (!ce.length) g += `<text x="0" y="${T + 16}">No finished ${SPLIT_NAME[split]} scores in this regime yet.</text>`;
   ce.forEach((e, k) => {
-    const y = T + k * rowH + rowH / 2, p = plPaper(e) || {};
+    const y = T + k * rowH + rowH / 2, p = plPaper(e) || {}, s1 = sc(e, split), s2 = sc(e, other), bg = e.model === "background";
     const tip = [plTip(e, e.def, "default test"), plTip(e, e.mean, "LOIO mean")].filter(Boolean).join("<br><br>") +
-      (p.def != null ? `<br><br>Paper: default ${f2(p.def)}${p.loio ? ` · LOIO mean ${f2(p.loio[5])}` : ""}${p.fewshot ? " (few-shot, Table 7)" : ""}` : "");
-    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-primary)">${labels[k]}</text>`;
+      (regime === "full" && p.def != null ? `<br><br>Paper: default ${f2(p.def)}${p.loio ? ` · LOIO mean ${f2(p.loio[5])}` : ""}` : "");
+    g += `<text x="${L - 12}" y="${y + 4}" text-anchor="end" style="fill:var(--text-${bg ? "muted" : "primary"})">${labels[k]}</text>`;
     g += `<g class="pt" data-tip="${tip.replace(/"/g, "&quot;")}">`;
-    if (e.def && e.mean) g += `<line x1="${x(e.mean.miou8)}" x2="${x(e.def.miou8)}" y1="${y}" y2="${y}" stroke="var(--text-muted)" stroke-width="2"/>`;
-    if (p.def != null) g += marker("circle", x(p.def), y, 4.5, "var(--series-1)", false, true);
-    if (p.loio) g += marker("square", x(p.loio[5]), y, 4.5, "var(--series-2)", false, true);
-    if (e.def) g += marker("circle", x(e.def.miou8), y, 5.5, "var(--series-1)", true);
-    if (e.mean) g += marker("square", x(e.mean.miou8), y, 5.5, "var(--series-2)", true);
+    if (s2 != null) g += `<line x1="${x(s1)}" x2="${x(s2)}" y1="${y}" y2="${y}" stroke="var(--grid)" stroke-width="2"/>` +
+      marker("circle", x(s2), y, 3.5, "var(--text-muted)");
+    if (regime === "full" && pk(p) != null) g += marker("circle", x(pk(p)), y, 4.5, bg ? "var(--text-muted)" : headColor(e.model), false, true);
+    g += bg ? marker("circle", x(s1), y, 5.5, "var(--text-muted)", false, true) : marker("circle", x(s1), y, 5.5, headColor(e.model), true);
     g += `<rect x="${L}" y="${y - 12}" width="${W - L - R}" height="24" fill="transparent"/></g>`;
   });
   svg.innerHTML = g;
-  // Table
-  const cols = [["input", "Input"], ["model", "Head"], ...PL_ISLANDS, ["mean", "LOIO mean"], ["pmean", "Paper"], ["def", "Default test"], ["pdef", "Paper"]];
+
+  // ---- Rank comparison: best head per input in each regime x split ----
+  const inputs = [...new Set(all.filter(e => e.model !== "background").map(e => e.input))];
+  const best = {};  // input -> col index -> {e, s, rank}
+  PL_COLS.forEach(([g2, s2], ci) => {
+    const cell = [];
+    for (const inp of inputs) {
+      const cands = all.filter(e => e.input === inp && e.model !== "background" && plRegime(e) === g2 && sc(e, s2) != null);
+      if (!cands.length) continue;
+      const b = cands.reduce((p, q) => sc(q, s2) > sc(p, s2) ? q : p);
+      cell.push({inp, e: b, s: sc(b, s2)});
+    }
+    cell.sort((p, q) => q.s - p.s).forEach((c, i) => { (best[c.inp] = best[c.inp] || {})[ci] = {...c, rank: i + 1, of: cell.length}; });
+  });
+  const selCol = PL_COLS.findIndex(([g2, s2]) => g2 === regime && s2 === split);
+  const rs = plRankSort || {key: selCol, dir: 1};
+  const shade = v => { if (v == null || isNaN(v)) return ""; const step = Math.max(0, Math.min(6, Math.round((v - 10) / 30 * 6)));
+    return `background: var(--seq-${step}); color: ${step >= 4 ? "#fff" : "var(--text-primary)"};`; };
+  const rkey = inp => rs.key === "input" ? (PL_INPUT_LABEL[inp] || inp) : ((best[inp] || {})[rs.key] || {}).rank;
+  const ri = inputs.filter(i => best[i]).sort((a, b) => { const p = rkey(a), q = rkey(b);
+    if (typeof p === "string") return p.localeCompare(q) * rs.dir;
+    if (p == null) return 1; if (q == null) return -1; return (p - q) * rs.dir; });
+  const rarrow = c => rs.key === c ? ` <span class="arrow">${rs.dir === -1 ? "▾" : "▴"}</span>` : "";
+  let h = `<thead><tr><th class="l" data-key="input">Input${rarrow("input")}</th>` +
+    PL_COLS.map(([, , n], ci) => `<th class="l" data-key="${ci}"${ci === selCol ? ' style="text-decoration:underline"' : ""}>${n}${rarrow(ci)}</th>`).join("") + "</tr></thead><tbody>";
+  for (const inp of ri) {
+    h += `<tr><td class="l">${PL_INPUT_LABEL[inp] || inp}</td>`;
+    PL_COLS.forEach((c, ci) => {
+      const b = best[inp][ci];
+      if (!b) { h += `<td class="l" style="color:var(--text-muted)">–</td>`; return; }
+      const r = c[1] === "loio" ? b.e.mean : b.e.def;
+      h += `<td class="l cell" style="${shade(b.s)}" data-tip="${plTip(b.e, r, c[2]).replace(/"/g, "&quot;")}"><b>#${b.rank}</b> ${f2(b.s)} · ${plHead(b.e)}</td>`;
+    });
+    h += "</tr>";
+  }
+  rt.innerHTML = h + "</tbody>";
+  rt.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    const k = th.dataset.key === "input" ? "input" : +th.dataset.key;
+    plRankSort = {key: k, dir: rs.key === k ? -rs.dir : 1}; render(); }));
+  // Spearman agreement between column pairs, over inputs scored in both
+  const rho = (i, j) => { const ps = inputs.filter(inp => best[inp] && best[inp][i] && best[inp][j]);
+    return ps.length < 3 ? null : {r: plSpearman(ps.map(p => best[p][i].s), ps.map(p => best[p][j].s)), n: ps.length}; };
+  const pairs = [[0, 2, "few-shot vs full, in-domain"], [1, 3, "few-shot vs full, unseen island"],
+    [0, 1, "in-domain vs unseen island, few-shot"], [2, 3, "in-domain vs unseen island, full"]];
+  document.getElementById("pl-agree").innerHTML = "Rank agreement (Spearman ρ over inputs scored in both columns, 1 = same order): " +
+    pairs.map(([i, j, n]) => { const q = rho(i, j); return `${n} <b>${q ? q.r.toFixed(2) : "–"}</b>${q ? ` (n = ${q.n})` : ""}`; }).join(" · ") + ".";
+
+  // ---- Per-island table for the chosen regime ----
+  document.getElementById("pl-table-note").textContent =
+    `${regime === "fewshot" ? "Few-shot (1,000 pixels per class)" : "Full training set"}: mIoU-8 (%) on each held-out territory, ` +
+    "their unweighted mean (the headline, as in paper Table 6), and the default-split test (paper Table 2)." +
+    (regime === "full" ? ' "Paper" columns repeat the authors\' value for the same input and head.' :
+      " The paper's few-shot numbers (Table 7) cover the default split only and are not repeated here.") +
+    " Mayotte is 99% Background, so predicting Background everywhere already scores 12.4 there. Click a header to sort.";
+  const cols = [["input", "Input"], ["model", "Head"], ...PL_ISLANDS, ["mean", "LOIO mean"],
+    ...(regime === "full" ? [["pmean", "Paper"]] : []), ["def", "Default test"], ...(regime === "full" ? [["pdef", "Paper"]] : [])];
   const v = (e, c) => c === "mean" ? (e.mean ? e.mean.miou8 : NaN) : c === "def" ? (e.def ? e.def.miou8 : NaN)
     : c === "pmean" ? ((plPaper(e) || {}).loio || [])[5] : c === "pdef" ? (plPaper(e) || {}).def
     : (e.islands[c] ? e.islands[c].miou8 : NaN);
@@ -691,9 +794,7 @@ function renderPlanteur(rows) {
     if (typeof p === "string") return p.localeCompare(q) * plSort.dir;
     if (p == null || isNaN(p)) return 1; if (q == null || isNaN(q)) return -1; return (p - q) * plSort.dir; });
   const arrow = c => plSort.key === c ? ` <span class="arrow">${plSort.dir === -1 ? "▾" : "▴"}</span>` : "";
-  const shade = val => { if (val == null || isNaN(val)) return ""; const step = Math.max(0, Math.min(6, Math.round((val - 10) / 30 * 6)));
-    return `background: var(--seq-${step}); color: ${step >= 4 ? "#fff" : "var(--text-primary)"};`; };
-  let h = `<thead><tr>${cols.map(([c, n], i) => `<th class="${i < 2 ? "l" : ""}" data-key="${c}">${n}${arrow(c)}</th>`).join("")}</tr></thead><tbody>`;
+  h = `<thead><tr>${cols.map(([c, n], i) => `<th class="${i < 2 ? "l" : ""}" data-key="${c}">${n}${arrow(c)}</th>`).join("")}</tr></thead><tbody>`;
   for (const e of te) {
     h += `<tr><td class="l">${plInput(e)}</td><td class="l">${plHead(e)}</td>`;
     for (const [c, n] of cols.slice(2)) {
